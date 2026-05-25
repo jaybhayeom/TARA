@@ -136,6 +136,6 @@ This project is entirely open-source and available to anyone under the **MIT Lic
 Designed and engineered by **Om Jaybhaye**.
 
 * **GitHub**: [@jaybhayeom](https://github.com/jaybhayeom)
-* **LinkedIn**: [Insert your LinkedIn Link here]
+* **LinkedIn**: [Om Jaybhaye](https://www.linkedin.com/in/om-jaybhaye-py)
 
 *If you found this project helpful, please consider leaving a ⭐️ on the repository!*
