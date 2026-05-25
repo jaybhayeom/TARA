@@ -10,6 +10,7 @@ TARA is a privacy-first, highly customizable AI assistant built with React and V
 - **Secure Master Keychain**: API keys and model configurations are protected behind a custom Master Passcode (PIN). Access to the secure settings panel is strictly locked down.
 - **Multi-Agent Profiles**: Seamlessly switch between different AI personalities and system prompts for specialized tasks.
 - **Incognito Stealth Mode**: A dedicated, non-recording private chat window exclusively powered by **Groq** for instantaneous, ultra-fast transient conversations.
+- **Workflow & App Integrations**: A dedicated "Apps" panel to seamlessly connect TARA with external workflows (GitHub, Figma, Slack, Instagram, LinkedIn) for enhanced cross-platform productivity.
 - **Real-Time Data Access**: Integrates with Grok (xAI) for lightning-fast, real-time up-to-date data queries when required.
 - **Fluid UI & Animations**: A heavily polished, galaxy-themed interface with micro-interactions, responsive sidebars, and typing animations designed for a premium user experience.
 
