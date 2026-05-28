@@ -135,6 +135,7 @@ This project is entirely open-source and available to anyone under the **MIT Lic
 
 Designed and engineered by **Om Jaybhaye**.
 
+* **Email**: [ojaybhaye04@gmail.com](mailto:ojaybhaye04@gmail.com)
 * **GitHub**: [@jaybhayeom](https://github.com/jaybhayeom)
 * **LinkedIn**: [Om Jaybhaye](https://www.linkedin.com/in/om-jaybhaye-py)
 
