@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, clipboard } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -228,6 +228,16 @@ app.whenReady().then(() => {
     } catch (e) {
       console.error("Decryption failed", e);
       return null;
+    }
+  });
+
+  // OS Telemetry IPCs
+  ipcMain.handle('system:readClipboard', () => {
+    try {
+      return clipboard.readText();
+    } catch (e) {
+      console.error("Failed to read clipboard", e);
+      return "";
     }
   });
 

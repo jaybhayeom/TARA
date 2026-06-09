@@ -406,6 +406,10 @@ export default function App() {
   const [complexAnswers, setComplexAnswers] = useState<string[]>([]);
   const [pendingComplexPrompt, setPendingComplexPrompt] = useState<string | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  
+  // --- Shadow Prompt State ---
+  const [shadowPrompt, setShadowPrompt] = useState<string | null>(null);
+  const [shadowPayload, setShadowPayload] = useState<string | null>(null);
 
   // --- IndexedDB Initialization ---
   useEffect(() => {
@@ -854,6 +858,60 @@ export default function App() {
   const cfg              = AGENTS[agent] || AGENTS["gemini"];
   const hasMessages      = messages.length > 0;
   const allRecsDismissed = RECS.every(r => dismissedRecs.has(r.id));
+
+  // --- Shadow Prompt Engine ---
+  useEffect(() => {
+    if (hasMessages || input.trim() !== "") {
+      setShadowPrompt(null);
+      setShadowPayload(null);
+      return;
+    }
+
+    const checkClipboard = async () => {
+      if (window.electron && window.electron.ipcRenderer) {
+        try {
+          const text = await window.electron.ipcRenderer.invoke('system:readClipboard');
+          if (!text || text.trim() === "") {
+            setShadowPrompt(null);
+            setShadowPayload(null);
+            return;
+          }
+          
+          const val = text.trim();
+          
+          // Pattern 1: Errors / Stack Traces
+          if (/(error|exception|traceback|fatal):/i.test(val) || /at .*:\d+/.test(val)) {
+            setShadowPrompt("Explain and fix this error: ");
+            setShadowPayload(val);
+          } 
+          // Pattern 2: Code Blocks
+          else if (/^(def |function |const |let |class |import |from )/m.test(val) || val.includes("=>") || val.includes("public class")) {
+            setShadowPrompt("Optimize and review this code:");
+            setShadowPayload(val);
+          }
+          // Pattern 3: URLs
+          else if (/^https?:\/\//i.test(val)) {
+            setShadowPrompt("Summarize the content of this link: ");
+            setShadowPayload(val);
+          } else {
+            setShadowPrompt(null);
+            setShadowPayload(null);
+          }
+        } catch (e) {
+          console.error("Shadow prompt engine failed", e);
+        }
+      }
+    };
+
+    checkClipboard();
+    const interval = setInterval(checkClipboard, 2000);
+    window.addEventListener("focus", checkClipboard);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", checkClipboard);
+    };
+  }, [hasMessages, input]);
 
   // --- Persistence & Lifecycle Effects ---
 
@@ -1994,12 +2052,24 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
   };
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && !e.shiftKey) { 
+      e.preventDefault(); 
+      send(); 
+    }
+    if (e.key === "Tab" && input.trim() === "" && shadowPrompt && shadowPayload) {
+      e.preventDefault();
+      const constructedPrompt = `${shadowPrompt}\n\n\`\`\`\n${shadowPayload}\n\`\`\``;
+      setInput(constructedPrompt);
+      send(constructedPrompt);
+    }
   }
 
   function newChat() {
-    setCurrentThreadId(`t${Date.now()}`);
-    setMessages([]); setInput(""); setIsTyping(false); 
+    const newId = `t${Date.now()}`;
+    setCurrentThreadId(newId);
+    currentThreadIdRef.current = newId;
+    setInput(""); 
+    setIsTyping(false); 
   }
 
   function copyText(text: string, id: string) {
@@ -5099,6 +5169,29 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
                 ))}
               </div>
             )}
+
+            {/* --- Shadow Prompt Overlay --- */}
+            {shadowPrompt && input.trim() === "" && (
+              <div className="anim-fade-in" style={{
+                position: "absolute", top: attachments.length > 0 ? 80 : 12, left: 16, right: 16, pointerEvents: "none",
+                fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.3)",
+                fontFamily: "inherit", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                display: "flex", flexDirection: "column", zIndex: 10
+              }}>
+                <div>
+                  <span style={{ color: cfg.color, fontWeight: 600, filter: `drop-shadow(0 0 5px ${cfg.color}40)` }}>
+                    {shadowPrompt}
+                  </span>
+                  <span style={{ fontStyle: "italic", opacity: 0.5, marginLeft: 4 }}>
+                    {shadowPayload && shadowPayload.length > 50 ? shadowPayload.substring(0, 50) + "..." : shadowPayload}
+                  </span>
+                </div>
+                <div style={{ marginTop: 2, fontSize: 10, color: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, fontWeight: 600, color: "rgba(255,255,255,0.4)" }}>Tab</span> to execute prediction
+                </div>
+              </div>
+            )}
+
             <textarea
               ref={taRef} rows={1} value={input}
               onChange={e => setInput(e.target.value)}
