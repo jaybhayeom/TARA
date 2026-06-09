@@ -36,7 +36,7 @@ type Phase = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 // 6 = Theme picker
 
 const AI_INTRO = [
-  "Hi. I'm your AI assistant.",
+  "Hi. I'm TARA, your AI assistant.",
   "I help you think, write, and explore ideas.",
   "I work online and offline — your choice.",
   "Your conversations are always private.",
@@ -188,17 +188,6 @@ export function Onboarding({ onComplete }: Props) {
         <div style={{ position:"absolute", width:"44%", height:"44%", bottom:"-16%",left:"20%",  background:"radial-gradient(circle,rgba(236,72,153,0.2) 0%,transparent 70%)",   filter:"blur(92px)", animation:"ob-b3 18s ease-in-out infinite" }} />
         <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.52)" }} />
       </div>
-
-      {/* ── Skip ── */}
-      {phase < 7 && !exiting && (
-        <button onClick={() => { clear(); setFadeOut(false); setPhase(7); }}
-          style={{ position:"absolute", top:22, right:26, background:"none", border:"none",
-            color:"rgba(255,255,255,0.16)", fontSize:12, cursor:"pointer",
-            letterSpacing:"0.04em", transition:"color 0.2s", zIndex:10 }}
-          onMouseEnter={e => (e.currentTarget.style.color="rgba(255,255,255,0.42)")}
-          onMouseLeave={e => (e.currentTarget.style.color="rgba(255,255,255,0.16)")}
-        >skip →</button>
-      )}
 
       {/* ── Content ── */}
       <div style={{
@@ -382,40 +371,6 @@ export function Onboarding({ onComplete }: Props) {
               })}
             </div>
 
-            <FieldLabel text="Default AI model" />
-            <div style={{ display:"flex", gap:10, marginBottom:28 }}>
-              {AGENT_OPTIONS.map(a => {
-                const Ico = a.id === "gemini" ? SpinningStar : Bot;
-                const active = agent === a.id;
-                return (
-                  <button key={a.id} onClick={() => setAgent(a.id)} style={{
-                    flex:1, padding:"15px 10px", borderRadius:15, border:"none", cursor:"pointer",
-                    background: active ? a.dim : "rgba(255,255,255,0.04)",
-                    outline: active ? `1.5px solid ${a.border}` : "1px solid rgba(255,255,255,0.08)",
-                    transition:"all 0.18s",
-                    display:"flex", flexDirection:"column", alignItems:"center", gap:8,
-                  }}
-                    onMouseEnter={e => { if(!active) e.currentTarget.style.background="rgba(255,255,255,0.07)"; }}
-                    onMouseLeave={e => { if(!active) e.currentTarget.style.background = active ? a.dim : "rgba(255,255,255,0.04)"; }}
-                  >
-                    <Ico size={21} style={{ color: active ? a.color : "rgba(255,255,255,0.3)" }} />
-                    <div style={{ textAlign:"center" }}>
-                      <div style={{ fontSize:12, fontWeight:600, color: active ? a.color : "rgba(255,255,255,0.58)", marginBottom:2 }}>{a.label}</div>
-                      <div style={{ fontSize:10, color:"rgba(255,255,255,0.25)" }}>{a.sub}</div>
-                    </div>
-                    <div style={{
-                      width:17, height:17, borderRadius:"50%",
-                      border:`2px solid ${active ? a.color : "rgba(255,255,255,0.15)"}`,
-                      background: active ? a.color : "transparent",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      transition:"all 0.18s",
-                    }}>
-                      {active && <Check size={8} style={{ color:"#000" }} />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
             <PrimaryBtn label="Next →" disabled={false} onClick={() => crossfade(6,0)} accent={theme.accentColor} />
           </div>
         )}
