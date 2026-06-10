@@ -25,6 +25,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { classifyComplexity, generateQuestions, rewritePrompt, needsRealTimeData } from "../agents/PromptRewriter";
 import { encryptData, decryptData } from "../utils/encryption";
 import { Onboarding, THEMES } from "./components/Onboarding";
+import CinematicOnboarding from "./components/CinematicOnboarding";
 import { ThemeBackground } from "./components/ThemeBackground";
 
 type Agent = "gemma" | "gemini" | "collector" | "groq" | "code" | "companion";
@@ -590,6 +591,107 @@ export default function App() {
   
   const [inputModalOptions, setInputModalOptions] = useState<string[] | null>(null);
   const [inputModalCustomText, setInputModalCustomText] = useState("");
+
+  // Classification logic for modal layouts (Concept 1: Predictive & Adaptive UI)
+  const classifyOptions = useCallback((opts: string[]): "binary" | "color" | "priority" | "standard" => {
+    if (!opts || opts.length === 0) return "standard";
+    const allLower = opts.map(o => o.toLowerCase());
+
+    // 1. Binary Toggle (exactly 2 options, short names or opposites)
+    if (opts.length === 2) {
+      const isPolar = allLower.some(o => 
+        o === "yes" || o === "no" || 
+        o.includes("enable") || o.includes("disable") || 
+        o === "true" || o === "false" ||
+        o.includes("accept") || o.includes("decline") ||
+        o.includes("local") || o.includes("cloud") ||
+        o.length <= 15
+      );
+      if (isPolar) return "binary";
+    }
+
+    // 2. Color/Theme choices
+    const isColor = allLower.some(o => 
+      o.includes("color") || o.includes("theme") || o.includes("palette") ||
+      o.includes("gradient") || o.includes("dark") || o.includes("light") ||
+      o.includes("indigo") || o.includes("violet") || o.includes("emerald") ||
+      o.includes("amber") || o.includes("rose") || o.includes("cyan") ||
+      o.includes("nebula") || o.includes("galaxy") ||
+      /#(?:[0-9a-f]{3}){1,2}/i.test(o)
+    );
+    if (isColor) return "color";
+
+    // 3. Performance / Priority / Quality / Architecture choices
+    const isPriority = allLower.some(o =>
+      o.includes("speed") || o.includes("accuracy") || o.includes("quality") ||
+      o.includes("performance") || o.includes("security") || o.includes("privacy") ||
+      o.includes("standard") || o.includes("advanced") || o.includes("hybrid") ||
+      o.includes("low") || o.includes("medium") || o.includes("high") ||
+      o.includes("fast") || o.includes("slow") || o.includes("optimal") ||
+      o.includes("reasoning")
+    );
+    if (isPriority) return "priority";
+
+    return "standard";
+  }, []);
+
+  // Predictive recommendation logic based on user preferences and active agent (Concept 1: Predictive & Adaptive UI)
+  const getRecommendedOptionIndex = useCallback((opts: string[]): number => {
+    if (!opts || opts.length === 0) return 0;
+    
+    let bestIdx = 0;
+    let highestScore = -1;
+    const lowerBio = (userBio || "").toLowerCase();
+
+    opts.forEach((opt, idx) => {
+      let score = 0;
+      const lowerOpt = opt.toLowerCase();
+
+      // Recommend based on active Agent context
+      if (agent === "code") {
+        if (lowerOpt.includes("code") || lowerOpt.includes("local") || lowerOpt.includes("refactor") || lowerOpt.includes("performance") || lowerOpt.includes("optim")) {
+          score += 3;
+        }
+      } else if (agent === "writer") {
+        if (lowerOpt.includes("creative") || lowerOpt.includes("write") || lowerOpt.includes("flow") || lowerOpt.includes("polish") || lowerOpt.includes("express")) {
+          score += 3;
+        }
+      } else if (agent === "analyst") {
+        if (lowerOpt.includes("deep") || lowerOpt.includes("accuracy") || lowerOpt.includes("detailed") || lowerOpt.includes("hybrid") || lowerOpt.includes("cloud") || lowerOpt.includes("reasoning")) {
+          score += 3;
+        }
+      }
+
+      // Recommend based on Quality triggers
+      if (lowerOpt.includes("recommended") || lowerOpt.includes("best") || lowerOpt.includes("hybrid") || lowerOpt.includes("balanced") || lowerOpt.includes("optimal")) {
+        score += 2;
+      }
+
+      // Recommend based on User Bio and Memory keywords
+      if (lowerBio.includes("privacy") || lowerBio.includes("local") || lowerBio.includes("offline") || lowerBio.includes("secure")) {
+        if (lowerOpt.includes("local") || lowerOpt.includes("private") || lowerOpt.includes("offline") || lowerOpt.includes("secure")) {
+          score += 4;
+        }
+      }
+      if (lowerBio.includes("speed") || lowerBio.includes("fast") || lowerBio.includes("performance")) {
+        if (lowerOpt.includes("speed") || lowerOpt.includes("fast") || lowerOpt.includes("groq") || lowerOpt.includes("performance")) {
+          score += 3;
+        }
+      }
+      if (lowerBio.includes("developer") || lowerBio.includes("programmer") || lowerBio.includes("engineer")) {
+        if (lowerOpt.includes("code") || lowerOpt.includes("tech") || lowerOpt.includes("git") || lowerOpt.includes("local")) {
+          score += 2;
+        }
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestIdx = idx;
+      }
+    });
+
+    return bestIdx;
+  }, [agent, userBio]);
 
   const [renamingId,     setRenamingId]     = useState<string | null>(null);
   const [renameValue,    setRenameValue]    = useState("");
@@ -5308,54 +5410,309 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
         </div>
       </div>
       
-      {inputModalOptions && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
-          <div style={{ background: "#0a0a0f", width: 420, borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 24px 60px rgba(0,0,0,0.8)", overflow: "hidden", display: "flex", flexDirection: "column", animation: "modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)" }}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <MousePointerClick size={18} color="#a78bfa" />
-                <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: 600 }}>Select Preference</span>
-              </div>
-              <button onClick={() => setInputModalOptions(null)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}><X size={16} /></button>
-            </div>
-            
-            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 8, maxHeight: "50vh", overflowY: "auto" }}>
-              {inputModalOptions.map((opt, i) => (
-                <button
-                  key={i}
-                  onClick={() => { send(String(opt)); setInputModalOptions(null); }}
-                  style={{ textAlign: "left", padding: "14px 16px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, color: "rgba(255,255,255,0.8)", fontSize: 14, cursor: "pointer", transition: "all 0.15s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(167, 139, 250, 0.1)"; e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.3)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
-                >
-                  {String(opt)}
-                </button>
-              ))}
-            </div>
+      {inputModalOptions && (() => {
+        const type = classifyOptions(inputModalOptions);
+        const recIdx = getRecommendedOptionIndex(inputModalOptions);
 
-            <div style={{ padding: "16px 20px", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginBottom: 8, fontWeight: 500 }}>OR ENTER CUSTOM IDEA:</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="text"
-                  value={inputModalCustomText}
-                  onChange={e => setInputModalCustomText(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && inputModalCustomText.trim()) { send(inputModalCustomText); setInputModalOptions(null); setInputModalCustomText(""); } }}
-                  placeholder="Type your own approach..."
-                  style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 13, outline: "none" }}
-                />
-                <button
-                  onClick={() => { if (inputModalCustomText.trim()) { send(inputModalCustomText); setInputModalOptions(null); setInputModalCustomText(""); } }}
-                  disabled={!inputModalCustomText.trim()}
-                  style={{ background: inputModalCustomText.trim() ? "#a78bfa" : "rgba(255,255,255,0.1)", color: inputModalCustomText.trim() ? "#000" : "rgba(255,255,255,0.3)", border: "none", borderRadius: 8, padding: "0 16px", cursor: inputModalCustomText.trim() ? "pointer" : "default", fontWeight: 600, transition: "background 0.2s" }}
-                >
-                  Send
-                </button>
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
+            <div style={{ 
+              background: "#0a0a0f", 
+              width: type === "binary" || type === "color" ? 540 : 440, 
+              borderRadius: 16, 
+              border: "1px solid rgba(255,255,255,0.08)", 
+              boxShadow: "0 24px 60px rgba(0,0,0,0.8)", 
+              overflow: "hidden", 
+              display: "flex", 
+              flexDirection: "column", 
+              animation: "modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+              transition: "width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)"
+            }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <MousePointerClick size={18} color="#a78bfa" style={{ filter: "drop-shadow(0 0 8px rgba(167, 139, 250, 0.5))" }} />
+                  <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: 600, fontFamily: "'Outfit', sans-serif", letterSpacing: "0.02em" }}>
+                    {type === "binary" ? "Quick Decision" : type === "color" ? "Select Theme / Color" : type === "priority" ? "Execution Mode" : "Select Preference"}
+                  </span>
+                </div>
+                <button onClick={() => setInputModalOptions(null)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", display: "flex", alignItems: "center" }}><X size={16} /></button>
+              </div>
+              
+              <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 12, maxHeight: "50vh", overflowY: "auto" }}>
+                
+                {/* 1. BINARY Toggle Layout */}
+                {type === "binary" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    {inputModalOptions.map((opt, i) => {
+                      const isRec = i === recIdx;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => { send(String(opt)); setInputModalOptions(null); }}
+                          style={{
+                            textAlign: "center",
+                            padding: "24px 16px",
+                            background: isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255,255,255,0.02)",
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.4)" : "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: 12,
+                            color: isRec ? "#e9d5ff" : "rgba(255,255,255,0.8)",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 12,
+                            boxShadow: isRec ? "0 0 15px rgba(167, 139, 250, 0.1)" : "none"
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = "rgba(167, 139, 250, 0.12)";
+                            e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                            e.currentTarget.style.transform = "translateY(-2px)";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255,255,255,0.02)";
+                            e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.4)" : "rgba(255,255,255,0.06)";
+                            e.currentTarget.style.transform = "translateY(0)";
+                          }}
+                        >
+                          <div style={{
+                            width: 36, height: 36, borderRadius: "50%",
+                            background: isRec ? "rgba(167, 139, 250, 0.15)" : "rgba(255,255,255,0.05)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.3)" : "1px solid rgba(255,255,255,0.1)"
+                          }}>
+                            {isRec ? <Sparkles size={16} color="#c084fc" /> : <Check size={16} color="rgba(255,255,255,0.5)" />}
+                          </div>
+                          <span style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em" }}>{String(opt)}</span>
+                          {isRec && (
+                            <span style={{ fontSize: 10, background: "rgba(167, 139, 250, 0.2)", color: "#c4b5fd", padding: "2px 6px", borderRadius: 4, fontWeight: 500 }}>
+                              RECOMMENDED
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 2. COLOR Grid Layout */}
+                {type === "color" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    {inputModalOptions.map((opt, i) => {
+                      const isRec = i === recIdx;
+                      
+                      let gradient = "linear-gradient(135deg, #4f46e5, #06b6d4)";
+                      const text = String(opt).toLowerCase();
+                      if (text.includes("dark") || text.includes("nebula") || text.includes("space")) {
+                        gradient = "linear-gradient(135deg, #1e1b4b, #311042)";
+                      } else if (text.includes("light")) {
+                        gradient = "linear-gradient(135deg, #e0f2fe, #bae6fd)";
+                      } else if (text.includes("emerald") || text.includes("green")) {
+                        gradient = "linear-gradient(135deg, #064e3b, #10b981)";
+                      } else if (text.includes("amber") || text.includes("rose") || text.includes("warm")) {
+                        gradient = "linear-gradient(135deg, #881337, #f43f5e)";
+                      } else if (text.includes("indigo") || text.includes("violet") || text.includes("galaxy")) {
+                        gradient = "linear-gradient(135deg, #3b0764, #6366f1)";
+                      }
+
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => { send(String(opt)); setInputModalOptions(null); }}
+                          style={{
+                            textAlign: "left",
+                            padding: "16px",
+                            background: isRec ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.01)",
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.4)" : "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: 12,
+                            color: "rgba(255,255,255,0.9)",
+                            cursor: "pointer",
+                            transition: "all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                            boxShadow: isRec ? "0 0 15px rgba(167, 139, 250, 0.08)" : "none"
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                            e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                            e.currentTarget.style.transform = "translateY(-2px)";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = isRec ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.01)";
+                            e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.4)" : "rgba(255,255,255,0.06)";
+                            e.currentTarget.style.transform = "translateY(0)";
+                          }}
+                        >
+                          <div style={{ width: "100%", height: 60, borderRadius: 8, background: gradient, border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "flex-end", padding: 8 }}>
+                            {isRec && (
+                              <span style={{ fontSize: 9, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", color: "#c4b5fd", border: "1px solid rgba(167,139,250,0.3)", padding: "1px 5px", borderRadius: 4, fontWeight: 600 }}>
+                                MATCHED PREFERENCE
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{String(opt)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 3. PRIORITY Mode Cards Layout */}
+                {type === "priority" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {inputModalOptions.map((opt, i) => {
+                      const isRec = i === recIdx;
+                      const text = String(opt).toLowerCase();
+                      
+                      let Icon = Cpu;
+                      let subtitle = "Standard execution model";
+                      if (text.includes("speed") || text.includes("fast") || text.includes("groq")) {
+                        Icon = Zap;
+                        subtitle = "Prioritizes response speed & latency reduction";
+                      } else if (text.includes("accuracy") || text.includes("deep") || text.includes("quality") || text.includes("reasoning")) {
+                        Icon = Brain;
+                        subtitle = "Prioritizes comprehensive logical depth & detail";
+                      } else if (text.includes("hybrid") || text.includes("balanced")) {
+                        Icon = RefreshCw;
+                        subtitle = "Balanced strategy combining multiple resources";
+                      } else if (text.includes("secure") || text.includes("private") || text.includes("local")) {
+                        Icon = Server;
+                        subtitle = "Runs entirely on local hardware for full confidentiality";
+                      }
+
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => { send(String(opt)); setInputModalOptions(null); }}
+                          style={{
+                            textAlign: "left",
+                            padding: "14px 18px",
+                            background: isRec ? "rgba(167, 139, 250, 0.04)" : "rgba(255,255,255,0.02)",
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.4)" : "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: 12,
+                            color: "rgba(255,255,255,0.85)",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 14,
+                            position: "relative",
+                            overflow: "hidden",
+                            boxShadow: isRec ? "0 0 15px rgba(167, 139, 250, 0.06)" : "none"
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = "rgba(167, 139, 250, 0.08)";
+                            e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.04)" : "rgba(255,255,255,0.02)";
+                            e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.4)" : "rgba(255,255,255,0.06)";
+                          }}
+                        >
+                          <div style={{
+                            width: 38, height: 38, borderRadius: 10,
+                            background: isRec ? "rgba(167, 139, 250, 0.12)" : "rgba(255,255,255,0.04)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0,
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.25)" : "1px solid rgba(255,255,255,0.08)"
+                          }}>
+                            <Icon size={18} color={isRec ? "#a78bfa" : "rgba(255,255,255,0.6)"} />
+                          </div>
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: isRec ? "#e9d5ff" : "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                              {String(opt)}
+                              {isRec && (
+                                <span style={{ fontSize: 9, background: "rgba(167, 139, 250, 0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: 4, fontWeight: 600 }}>
+                                  RECOMMENDED
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{subtitle}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 4. STANDARD List Layout */}
+                {type === "standard" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {inputModalOptions.map((opt, i) => {
+                      const isRec = i === recIdx;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => { send(String(opt)); setInputModalOptions(null); }}
+                          style={{
+                            textAlign: "left",
+                            padding: "14px 16px",
+                            background: isRec ? "rgba(167, 139, 250, 0.04)" : "rgba(255,255,255,0.02)",
+                            border: isRec ? "1px solid rgba(167, 139, 250, 0.45)" : "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: 10,
+                            color: isRec ? "#e9d5ff" : "rgba(255,255,255,0.8)",
+                            fontSize: 13,
+                            fontWeight: isRec ? 600 : 400,
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            boxShadow: isRec ? "0 0 15px rgba(167, 139, 250, 0.1)" : "none"
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = "rgba(167, 139, 250, 0.08)";
+                            e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.04)" : "rgba(255,255,255,0.02)";
+                            e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.45)" : "rgba(255,255,255,0.06)";
+                          }}
+                        >
+                          <span>{String(opt)}</span>
+                          {isRec && (
+                            <span style={{ fontSize: 9, background: "rgba(167, 139, 250, 0.2)", color: "#a78bfa", padding: "1px 6px", borderRadius: 4, fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
+                              <Sparkles size={8} /> RECOMMENDED
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+              </div>
+
+              <div style={{ padding: "16px 20px", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, marginBottom: 8, fontWeight: 600, letterSpacing: "0.05em" }}>OR ENTER CUSTOM IDEA:</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={inputModalCustomText}
+                    onChange={e => setInputModalCustomText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && inputModalCustomText.trim()) { send(inputModalCustomText); setInputModalOptions(null); setInputModalCustomText(""); } }}
+                    placeholder="Type your own approach..."
+                    style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 13, outline: "none", transition: "border 0.2s" }}
+                    onFocus={e => e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.4)"}
+                    onBlur={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"}
+                  />
+                  <button
+                    onClick={() => { if (inputModalCustomText.trim()) { send(inputModalCustomText); setInputModalOptions(null); setInputModalCustomText(""); } }}
+                    disabled={!inputModalCustomText.trim()}
+                    style={{ background: inputModalCustomText.trim() ? "linear-gradient(135deg, #a78bfa, #c084fc)" : "rgba(255,255,255,0.05)", color: inputModalCustomText.trim() ? "#000" : "rgba(255,255,255,0.2)", border: "none", borderRadius: 8, padding: "0 16px", cursor: inputModalCustomText.trim() ? "pointer" : "default", fontWeight: 600, transition: "all 0.2s", boxShadow: inputModalCustomText.trim() ? "0 4px 12px rgba(167,139,250,0.2)" : "none" }}
+                  >
+                    Send
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
     </div>
   );

@@ -182,3 +182,8 @@
   box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important;
   padding: 24px !important;
 }
+
+@keyframes modalIn {
+  0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
