@@ -25,7 +25,6 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { classifyComplexity, generateQuestions, rewritePrompt, needsRealTimeData } from "../agents/PromptRewriter";
 import { encryptData, decryptData } from "../utils/encryption";
 import { Onboarding, THEMES } from "./components/Onboarding";
-import CinematicOnboarding from "./components/CinematicOnboarding";
 import { ThemeBackground } from "./components/ThemeBackground";
 
 type Agent = "gemma" | "gemini" | "collector" | "groq" | "code" | "companion";
@@ -573,6 +572,8 @@ export default function App() {
   const [showSettings,   setShowSettings]   = useState(false);
   const [showProfile,    setShowProfile]    = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [signOutConfirmed, setSignOutConfirmed] = useState(false);
   const [showAgents,     setShowAgents]     = useState(false);   // agents sub-panel
   const [activePreset,   setActivePreset]   = useState("gemini");
   const [isFocused,      setIsFocused]      = useState(false);
@@ -2589,7 +2590,7 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
   }
 
   if (!onboarded) {
-    return <CinematicOnboarding onComplete={(data) => {
+    return <Onboarding onComplete={(data) => {
       try {
         setUserName(data.name);
         
@@ -2601,17 +2602,25 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
           localStorage.setItem("tara_groq_api_key", data.groqKey);
         }
         
-        let defaultTheme = "midnight";
+        let defaultTheme = data.themeId || "midnight";
         let defaultAgent = "gemini";
-        if (data.environment === "engineering") { defaultTheme = "midnight"; defaultAgent = "code"; }
-        if (data.environment === "data") { defaultTheme = "velvet"; defaultAgent = "groq"; }
-        if (data.environment === "companion") { defaultTheme = "glass"; defaultAgent = "gemini"; }
+        if (data.role === "engineering") { defaultAgent = "code"; }
+        if (data.role === "data") { defaultAgent = "groq"; }
         
         setThemeId(defaultTheme);
         setAgent(defaultAgent as Agent);
         localStorage.setItem("tara_themeId", defaultTheme);
-        localStorage.setItem("tara_environment", data.environment);
+        localStorage.setItem("tara_environment", data.role);
         localStorage.setItem("tara_username", data.name);
+        
+        if (data.passcode) {
+          localStorage.setItem("tara_passcode", data.passcode);
+        }
+        if (data.securityQuestion) {
+          localStorage.setItem("tara_security_question", data.securityQuestion);
+          localStorage.setItem("tara_security_answer", data.securityAnswer);
+        }
+        
         localStorage.setItem("tara_onboarded", "true");
         setOnboarded(true);
       } catch (err: any) {
@@ -4330,18 +4339,102 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
             ><Key size={13} /> API Keys</button>
             <button
               onClick={() => {
-                if (window.confirm("Are you sure you want to sign out? This will clear all your data including chats, memories, and preferences.")) {
-                  setThreads([]); setCurrentThreadId(""); setMessages([]);
-                  setPersonalMemories([]); setUserName("User"); setUserBio("");
-                  localStorage.clear();
-                  set("tara_threads", []).catch(() => {});
-                  closeAll();
-                }
+                setShowSignOutModal(true);
+                setSignOutConfirmed(false);
               }}
               style={{ width: "100%", textAlign: "left", padding: "9px 16px", color: "rgba(255,90,90,0.55)", fontSize: 12, background: "transparent", cursor: "pointer", transition: "background 0.12s, color 0.12s", border: "none", display: "flex", alignItems: "center", gap: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,90,90,0.06)"; e.currentTarget.style.color = "rgba(255,90,90,0.85)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,90,90,0.55)"; }}
             ><X size={13} /> Sign Out</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sign Out Confirmation Modal ── */}
+      {showSignOutModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)",
+          animation: "ob-fade-in 0.2s ease-out",
+        }} onClick={() => setShowSignOutModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 380, borderRadius: 18, padding: "28px 24px",
+            background: "rgba(18,18,28,0.98)", border: "1px solid rgba(255,90,90,0.15)",
+            boxShadow: "0 25px 80px rgba(0,0,0,0.8), 0 0 40px rgba(255,60,60,0.08)",
+            animation: "ob-fade-up 0.3s ease-out",
+          }}>
+            {/* Warning Icon */}
+            <div style={{ textAlign: "center", marginBottom: 18 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: "rgba(255,90,90,0.1)", border: "1px solid rgba(255,90,90,0.2)",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <AlertCircle size={24} color="#ff5a5a" />
+              </div>
+            </div>
+
+            <h3 style={{ color: "#fff", fontSize: 18, fontWeight: 700, textAlign: "center", margin: "0 0 8px", letterSpacing: "-0.02em" }}>
+              Sign Out of TARA?
+            </h3>
+            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, textAlign: "center", lineHeight: 1.6, margin: "0 0 22px" }}>
+              This will permanently erase all your chats, memories, API keys, preferences, and reset TARA to a brand new state.
+            </p>
+
+            {/* Checkbox confirmation */}
+            <label style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "12px 14px",
+              borderRadius: 10, cursor: "pointer", marginBottom: 20,
+              background: signOutConfirmed ? "rgba(255,90,90,0.08)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${signOutConfirmed ? "rgba(255,90,90,0.25)" : "rgba(255,255,255,0.08)"}`,
+              transition: "all 0.2s",
+            }}>
+              <input
+                type="checkbox" checked={signOutConfirmed}
+                onChange={e => setSignOutConfirmed(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "#ff5a5a", cursor: "pointer" }}
+              />
+              <span style={{ color: signOutConfirmed ? "rgba(255,90,90,0.9)" : "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 500 }}>
+                I understand this action cannot be undone
+              </span>
+            </label>
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowSignOutModal(false)}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.7)",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+              >Cancel</button>
+              <button
+                disabled={!signOutConfirmed}
+                onClick={() => {
+                  setThreads([]); setCurrentThreadId(""); setMessages([]);
+                  setPersonalMemories([]); setUserName("User"); setUserBio("");
+                  localStorage.clear();
+                  set("tara_threads", []).catch(() => {});
+                  setShowSignOutModal(false);
+                  closeAll();
+                  setOnboarded(false);
+                }}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: 10, border: "none",
+                  background: signOutConfirmed ? "rgba(255,60,60,0.85)" : "rgba(255,60,60,0.2)",
+                  color: signOutConfirmed ? "#fff" : "rgba(255,255,255,0.3)",
+                  fontSize: 13, fontWeight: 700, cursor: signOutConfirmed ? "pointer" : "not-allowed",
+                  transition: "all 0.2s",
+                  boxShadow: signOutConfirmed ? "0 4px 20px rgba(255,60,60,0.3)" : "none",
+                }}
+                onMouseEnter={e => { if(signOutConfirmed) e.currentTarget.style.background = "rgba(255,40,40,0.95)"; }}
+                onMouseLeave={e => { if(signOutConfirmed) e.currentTarget.style.background = "rgba(255,60,60,0.85)"; }}
+              >Sign Out & Reset</button>
+            </div>
           </div>
         </div>
       )}

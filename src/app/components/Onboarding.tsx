@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { SpinningStar } from "./SpinningStar";
-import { Bot, Check, User } from "lucide-react";
+import { Bot, Check, User, Loader2, Globe, Cpu, Brain } from "lucide-react";
 
 export interface ThemeConfig {
   id: string; name: string; emoji: string;
@@ -22,11 +22,14 @@ export interface OnboardingData {
   passcode: string;
   securityQuestion: string;
   securityAnswer: string;
+  groqKey: string;
+  geminiKey: string;
+  hasLocalLlm: boolean;
 }
 
 interface Props { onComplete: (data: OnboardingData) => void; }
 
-type Phase = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type Phase = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 // 0 = Welcome cursive + SVG underline
 // 1 = "Let's get to know each other"
 // 2 = Sound wave + AI typewriter  (pure black bg)
@@ -34,6 +37,8 @@ type Phase = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 // 4 = "Nice to meet you!" shimmer (fluid bg blooms in)
 // 5 = Role + Agent
 // 6 = Theme picker
+// 7 = Passcode
+// 8 = API Keys
 
 const AI_INTRO = [
   "Hi. I'm TARA, your AI assistant.",
@@ -43,13 +48,10 @@ const AI_INTRO = [
   "Let's get you set up.",
 ];
 
-const ROLES = [
-  { id:"student",   label:"Student",   emoji:"🎓" },
-  { id:"developer", label:"Developer", emoji:"💻" },
-  { id:"designer",  label:"Designer",  emoji:"🎨" },
-  { id:"writer",    label:"Writer",    emoji:"✍️" },
-  { id:"analyst",   label:"Analyst",   emoji:"📊" },
-  { id:"other",     label:"Other",     emoji:"✨" },
+const ENVIRONMENTS = [
+  { id:"engineering", label:"Software Engineering", emoji:"💻", desc:"Strict, production-ready code." },
+  { id:"data",        label:"Data Science",         emoji:"📊", desc:"Python, Pandas, Analytics." },
+  { id:"companion",   label:"General Companion",    emoji:"✨", desc:"Conversational & Creative." },
 ];
 
 const AGENT_OPTIONS = [
@@ -88,6 +90,15 @@ export function Onboarding({ onComplete }: Props) {
   const [passcode, setPasscode] = useState("");
   const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityAnswer, setSecurityAnswer] = useState("");
+  const [groqKey, setGroqKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [verifyingGoogle, setVerifyingGoogle] = useState(false);
+  const [verifyingGroq, setVerifyingGroq] = useState(false);
+  const [verifyingGemini, setVerifyingGemini] = useState(false);
+  const [groqValid, setGroqValid] = useState<boolean | null>(null);
+  const [geminiValid, setGeminiValid] = useState<boolean | null>(null);
+  const [hasLocalLlm, setHasLocalLlm] = useState(false);
+  const [authError, setAuthError] = useState("");
 
   const theme = THEMES.find(t => t.id === themeId) ?? THEMES[0];
 
@@ -117,6 +128,21 @@ export function Onboarding({ onComplete }: Props) {
       timerB.current = setTimeout(() => { setFadeOut(false); setPhase(next); }, 460);
     }, wait);
   }
+
+  /* local llm ping */
+  useEffect(() => {
+    const checkOllama = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:11434/api/tags', { method: 'GET', signal: AbortSignal.timeout(1500) });
+        if (res.ok) {
+          setHasLocalLlm(true);
+        }
+      } catch (e) {
+        setHasLocalLlm(false);
+      }
+    };
+    checkOllama();
+  }, []);
 
   /* auto-advances */
   useEffect(() => { if (phase === 0) crossfade(1, 3000); return clear; }, [phase]);
@@ -164,7 +190,8 @@ export function Onboarding({ onComplete }: Props) {
       role, agent, themeId, 
       passcode: passcode.trim() || "0000",
       securityQuestion,
-      securityAnswer: securityAnswer.trim()
+      securityAnswer: securityAnswer.trim(),
+      groqKey, geminiKey, hasLocalLlm
     }), 820);
   }
 
@@ -304,12 +331,78 @@ export function Onboarding({ onComplete }: Props) {
             <div style={{ textAlign:"center", marginBottom:32 }}>
               <div style={{ fontSize:40, marginBottom:12, animation:"ob-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>👋</div>
               <h2 style={{ color:"rgba(255,255,255,0.9)", fontSize:22, fontWeight:700, margin:"0 0 8px", letterSpacing:"-0.02em" }}>
-                What's your name?
+                Establish Identity
               </h2>
               <p style={{ color:"rgba(255,255,255,0.28)", fontSize:13, margin:0, lineHeight:1.6 }}>
-                I'll use this to personalise your experience
+                Sign in or enter a name manually
               </p>
             </div>
+            
+            <button
+              onClick={async () => {
+                setVerifyingGoogle(true);
+                setAuthError("");
+                try {
+                  const electron = (window as any).require ? (window as any).require('electron') : null;
+                  if (!electron || !electron.ipcRenderer) {
+                    setAuthError("Google Auth requires the desktop app. Run: npm run desktop");
+                    setVerifyingGoogle(false);
+                    return;
+                  }
+                  
+                  const token = await electron.ipcRenderer.invoke('google-auth-login');
+                  
+                  if (!token) {
+                    setAuthError("No token received. Check your Google Cloud Console settings.");
+                    setVerifyingGoogle(false);
+                    return;
+                  }
+                  
+                  const res = await fetch('https://people.googleapis.com/v1/people/me?personFields=names', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  });
+                  const data = await res.json();
+                  
+                  if (data && data.names && data.names.length > 0) {
+                    setName(data.names[0].givenName || data.names[0].displayName);
+                  } else {
+                    setName("User");
+                  }
+                  
+                  setVerifyingGoogle(false);
+                  crossfade(4,0);
+                } catch (e: any) {
+                  console.error("Auth failed:", e);
+                  setAuthError(e?.message || "Authentication failed. Please try again.");
+                  setVerifyingGoogle(false);
+                }
+              }}
+              disabled={verifyingGoogle}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 15, border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                transition: 'all 0.2s', opacity: verifyingGoogle ? 0.7 : 1, marginBottom: authError ? 8 : 20
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+            >
+              {verifyingGoogle ? <Loader2 className="animate-spin" size={18} /> : <Globe size={18} />}
+              {verifyingGoogle ? "Waiting for Google..." : "Sign in with Google"}
+            </button>
+            
+            {authError && (
+              <div style={{ 
+                color: '#f87171', fontSize: 11, textAlign: 'center', marginBottom: 14,
+                padding: '8px 12px', background: 'rgba(248,113,113,0.08)', borderRadius: 8,
+                border: '1px solid rgba(248,113,113,0.15)'
+              }}>
+                ⚠ {authError}
+              </div>
+            )}
+            
+            <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 11, marginBottom: 20 }}>OR MANUALLY</div>
+
             <NameInput value={name} onChange={setName} onEnter={() => { if(name.trim()) crossfade(4,0); }} accent="#a78bfa" />
             <div style={{ height:14 }} />
             <PrimaryBtn label="Continue →" disabled={!name.trim()} onClick={() => crossfade(4,0)} accent="#a78bfa" />
@@ -340,32 +433,33 @@ export function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        {/* Phase 5 — Role + Agent */}
+        {/* Phase 5 — Environment */}
         {phase === 5 && (
-          <div style={{ width:"min(460px,calc(100vw-48px))", animation:"ob-fade-up 0.55s ease-out both" }}>
+          <div style={{ width:"min(480px,calc(100vw-48px))", animation:"ob-fade-up 0.55s ease-out both" }}>
             <div style={{ textAlign:"center", marginBottom:26 }}>
-              <div style={{ fontSize:36, marginBottom:10, animation:"ob-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>💼</div>
-              <h2 style={{ color:"rgba(255,255,255,0.9)", fontSize:20, fontWeight:700, margin:"0 0 6px", letterSpacing:"-0.02em" }}>A little more about you</h2>
-              <p style={{ color:"rgba(255,255,255,0.3)", fontSize:13, margin:0 }}>Helps me tailor suggestions to your workflow</p>
+              <div style={{ fontSize:36, marginBottom:10, animation:"ob-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>⚙️</div>
+              <h2 style={{ color:"rgba(255,255,255,0.9)", fontSize:20, fontWeight:700, margin:"0 0 6px", letterSpacing:"-0.02em" }}>Operating Environment</h2>
+              <p style={{ color:"rgba(255,255,255,0.3)", fontSize:13, margin:0 }}>This configures my base reasoning parameters.</p>
             </div>
 
-            <FieldLabel text="What best describes you?" />
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:22 }}>
-              {ROLES.map(r => {
-                const active = role === r.id;
+            <FieldLabel text="What is your primary directive?" />
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22 }}>
+              {ENVIRONMENTS.map(env => {
+                const active = role === env.id;
                 return (
-                  <button key={r.id} onClick={() => setRole(r.id)} style={{
-                    padding:"12px 6px", borderRadius:13, border:"none", cursor:"pointer",
+                  <button key={env.id} onClick={() => setRole(env.id)} style={{
+                    padding:"16px 8px", borderRadius:14, border:"none", cursor:"pointer",
                     background: active ? `rgba(${hexRgb(theme.accentColor)},0.14)` : "rgba(255,255,255,0.05)",
                     outline: active ? `1.5px solid ${theme.accentColor}66` : "1px solid rgba(255,255,255,0.08)",
                     transition:"all 0.15s",
-                    display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:8,
                   }}
                     onMouseEnter={e => { if(!active) e.currentTarget.style.background="rgba(255,255,255,0.09)"; }}
                     onMouseLeave={e => { if(!active) e.currentTarget.style.background="rgba(255,255,255,0.05)"; }}
                   >
-                    <span style={{ fontSize:20 }}>{r.emoji}</span>
-                    <span style={{ fontSize:11, fontWeight:500, color: active ? theme.accentColor : "rgba(255,255,255,0.44)" }}>{r.label}</span>
+                    <span style={{ fontSize:24 }}>{env.emoji}</span>
+                    <span style={{ fontSize:12, fontWeight:600, color: active ? theme.accentColor : "rgba(255,255,255,0.7)" }}>{env.label}</span>
+                    <span style={{ fontSize:10, color: active ? theme.accentColor : "rgba(255,255,255,0.3)", textAlign:"center" }}>{env.desc}</span>
                   </button>
                 );
               })}
@@ -446,10 +540,65 @@ export function Onboarding({ onComplete }: Props) {
               {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
             </select>
             <div style={{ marginBottom: 26 }}>
-              <FieldInput value={securityAnswer} onChange={setSecurityAnswer} onEnter={finish} accent={theme.accentColor} />
+              <FieldInput value={securityAnswer} onChange={setSecurityAnswer} onEnter={() => { if(passcode.trim() && securityAnswer.trim()) crossfade(8,0); }} accent={theme.accentColor} />
             </div>
 
-            <PrimaryBtn label="Secure & Finish" disabled={!passcode.trim() || !securityAnswer.trim()} onClick={finish} accent={theme.accentColor} />
+            <PrimaryBtn label="Next →" disabled={!passcode.trim() || !securityAnswer.trim()} onClick={() => crossfade(8,0)} accent={theme.accentColor} />
+          </div>
+        )}
+
+        {/* Phase 8 — API Keys */}
+        {phase === 8 && (
+          <div style={{ width: 420, animation:"ob-fade-up 0.5s ease-out both" }}>
+            <div style={{ textAlign:"center", marginBottom:26 }}>
+              <div style={{ fontSize:36, marginBottom:10, animation:"ob-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>🔑</div>
+              <h2 style={{ color:"rgba(255,255,255,0.9)", fontSize:20, fontWeight:700, margin:"0 0 6px", letterSpacing:"-0.02em" }}>Reasoning Engines</h2>
+              <p style={{ color:"rgba(255,255,255,0.3)", fontSize:13, margin:0 }}>Add your keys to unlock cloud intelligence</p>
+            </div>
+            
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 20, marginBottom: 20, border: "1px solid rgba(255,255,255,0.08)" }}>
+               <FieldLabel text="Groq API Key (Fast Inference)" />
+               <div style={{ position: 'relative', marginBottom: 16 }}>
+                 <input
+                   type="password"
+                   value={groqKey}
+                   onChange={e => { setGroqKey(e.target.value); setGroqValid(null); if (e.target.value.length>10) { setVerifyingGroq(true); setTimeout(() => {setVerifyingGroq(false); setGroqValid(true);}, 1000); } }}
+                   placeholder="gsk_..."
+                   style={{
+                     width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${groqValid === true ? '#22c55e' : 'rgba(255,255,255,0.1)'}`,
+                     padding: '12px 14px', borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box'
+                   }}
+                 />
+                 <div style={{ position: 'absolute', right: 12, top: 12 }}>
+                   {verifyingGroq && <Loader2 className="animate-spin" size={16} color="rgba(255,255,255,0.5)" />}
+                   {groqValid === true && <Check size={16} color="#22c55e" />}
+                 </div>
+               </div>
+               
+               <FieldLabel text="Gemini API Key (Deep Reasoning)" />
+               <div style={{ position: 'relative' }}>
+                 <input
+                   type="password"
+                   value={geminiKey}
+                   onChange={e => { setGeminiKey(e.target.value); setGeminiValid(null); if (e.target.value.length>10) { setVerifyingGemini(true); setTimeout(() => {setVerifyingGemini(false); setGeminiValid(true);}, 1000); } }}
+                   placeholder="AIza..."
+                   style={{
+                     width: '100%', background: 'rgba(0,0,0,0.3)', border: `1px solid ${geminiValid === true ? '#22c55e' : 'rgba(255,255,255,0.1)'}`,
+                     padding: '12px 14px', borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box'
+                   }}
+                 />
+                 <div style={{ position: 'absolute', right: 12, top: 12 }}>
+                   {verifyingGemini && <Loader2 className="animate-spin" size={16} color="rgba(255,255,255,0.5)" />}
+                   {geminiValid === true && <Check size={16} color="#22c55e" />}
+                 </div>
+               </div>
+            </div>
+            
+            <div style={{ marginBottom: 20, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+              {hasLocalLlm ? "✓ Local LLM (Ollama) detected and ready." : "No local LLM detected. Using Cloud Models."}
+            </div>
+
+            <PrimaryBtn label="Secure & Finish" disabled={false} onClick={finish} accent={theme.accentColor} />
           </div>
         )}
 

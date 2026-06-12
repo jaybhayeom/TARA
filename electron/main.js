@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain, safeStorage, clipboard } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, clipboard, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import https from 'https';
+import http from 'http';
+import crypto from 'crypto';
 import { spawn } from 'child_process';
 import pkgUpdater from 'electron-updater';
 const { autoUpdater } = pkgUpdater;
@@ -239,6 +241,119 @@ app.whenReady().then(() => {
       console.error("Failed to read clipboard", e);
       return "";
     }
+  });
+
+  // --- Google OAuth ---
+  ipcMain.handle('google-auth-login', async (event) => {
+    return new Promise((resolve, reject) => {
+      const clientId = '717018004786-tjbjr75oponqt12g1haqh5bmvibsce0c.apps.googleusercontent.com';
+      
+      // Generate PKCE code verifier and challenge
+      const codeVerifier = crypto.randomBytes(32).toString('base64url');
+      const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+      
+      let boundPort = null;
+      
+      const server = http.createServer(async (req, res) => {
+        try {
+          const reqUrl = new URL(req.url, `http://127.0.0.1:${boundPort}`);
+          console.log('[TARA Auth] Received callback:', reqUrl.pathname);
+          
+          if (reqUrl.pathname === '/callback') {
+            const code = reqUrl.searchParams.get('code');
+            const error = reqUrl.searchParams.get('error');
+            
+            if (error) {
+              console.error('[TARA Auth] Google error:', error);
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(`<html><body style="background:#0c0c14;color:#f87171;font-family:sans-serif;text-align:center;padding:80px;"><h2>Authentication Failed</h2><p>${error}</p></body></html>`);
+              server.close();
+              return reject(new Error("Google returned error: " + error));
+            }
+            
+            if (code) {
+              console.log('[TARA Auth] Got auth code, exchanging for token...');
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end('<html><body style="background:#0c0c14;color:#a78bfa;font-family:sans-serif;text-align:center;padding:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;"><h2 style="font-size:32px;margin-bottom:16px;">✓ Authentication Successful</h2><p style="color:rgba(255,255,255,0.6);">You can close this tab and return to TARA.</p></body></html>');
+              
+              const redirectUri = `http://127.0.0.1:${boundPort}/callback`;
+              
+              try {
+                const tokenBody = new URLSearchParams({
+                  code,
+                  client_id: clientId,
+                  redirect_uri: redirectUri,
+                  grant_type: 'authorization_code',
+                  code_verifier: codeVerifier
+                });
+                
+                console.log('[TARA Auth] Token exchange to:', 'https://oauth2.googleapis.com/token');
+                console.log('[TARA Auth] redirect_uri:', redirectUri);
+                
+                const fetchResponse = await fetch('https://oauth2.googleapis.com/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: tokenBody
+                });
+                
+                const data = await fetchResponse.json();
+                console.log('[TARA Auth] Token response keys:', Object.keys(data));
+                
+                server.close();
+                
+                if (data.access_token) {
+                  console.log('[TARA Auth] Success! Got access token.');
+                  resolve(data.access_token);
+                } else {
+                  console.error('[TARA Auth] Token exchange failed:', JSON.stringify(data));
+                  reject(new Error("Token exchange failed: " + (data.error_description || data.error || JSON.stringify(data))));
+                }
+              } catch (err) {
+                server.close();
+                console.error('[TARA Auth] Token fetch error:', err);
+                reject(err);
+              }
+            } else {
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end('<html><body>Auth failed - no code. Close this tab.</body></html>');
+              server.close();
+              reject(new Error("No authorization code received"));
+            }
+          } else {
+            // Favicon or other requests - ignore
+            res.writeHead(200);
+            res.end();
+          }
+        } catch (err) {
+          console.error('[TARA Auth] Server handler error:', err);
+          res.writeHead(500);
+          res.end('Internal Error');
+          server.close();
+          reject(err);
+        }
+      });
+
+      server.on('error', (e) => {
+        console.error('[TARA Auth] Server error:', e);
+        reject(new Error("Auth server failed to start: " + e.message));
+      });
+
+      // Bind to port 0 so the OS picks an available port
+      server.listen(0, '127.0.0.1', () => {
+        boundPort = server.address().port;
+        const redirectUri = `http://127.0.0.1:${boundPort}/callback`;
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=profile%20email&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+        
+        console.log('[TARA Auth] Loopback server on port', boundPort);
+        console.log('[TARA Auth] Opening browser for auth...');
+        
+        shell.openExternal(authUrl).catch(err => {
+          console.error('[TARA Auth] Failed to open browser:', err);
+          server.close();
+          reject(new Error("Failed to open browser: " + err.message));
+        });
+      });
+    });
   });
 
   // --- Kokoro TTS Downloader & Server IPC ---
