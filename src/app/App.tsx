@@ -852,12 +852,18 @@ export default function App() {
 
     const handleUpdaterMessage = (event: any, data: any) => {
       console.log("[Updater Message]:", data);
-      if (data.type === "checking") setUpdateStatus("checking");
+      if (data.type === "checking") {
+        setUpdateStatus("checking");
+        toast.loading("Checking for updates...", { id: "update-toast" });
+      }
       else if (data.type === "update-available") {
         setUpdateStatus("available");
-        toast.info("A new version of TARA is available! Downloading in the background...");
+        toast.success("Update available! Downloading in background...", { id: "update-toast" });
       }
-      else if (data.type === "update-not-available") setUpdateStatus("idle");
+      else if (data.type === "update-not-available") {
+        setUpdateStatus("idle");
+        toast.success("TARA is up to date!", { id: "update-toast", duration: 3000 });
+      }
       else if (data.type === "download-progress" && data.progress) {
         setUpdateStatus("downloading");
         setUpdateProgress(Math.round(data.progress.percent));
@@ -2422,185 +2428,410 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
     URL.revokeObjectURL(url);
   };
 
-  const markdownComponents: any = {
-    table({ node, ...props }: any) {
-      return (
-        <div className="w-full overflow-x-auto my-4 rounded-xl border border-white/10" style={{ maxWidth: "100%" }}>
-          <table className="w-full text-sm text-left border-collapse" style={{ minWidth: 600 }} {...props} />
-        </div>
-      );
-    },
-    th({ node, ...props }: any) {
-      return <th className="px-4 py-3 border-b border-white/10 font-medium whitespace-nowrap" style={{ background: "rgba(255,255,255,0.06)", fontFamily: "'Outfit', sans-serif", fontSize: 14 }} {...props} />;
-    },
-    td({ node, ...props }: any) {
-      return <td className="px-4 py-3 border-b border-white/5" {...props} />;
-    },
-    h1({ node, ...props }: any) {
-      return <h1 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.8em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
-    },
-    h2({ node, ...props }: any) {
-      return <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.5em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
-    },
-    h3({ node, ...props }: any) {
-      return <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.25em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
-    },
-    blockquote({ node, ...props }: any) {
-      return (
-        <blockquote
-          style={{
-            fontFamily: "'Times New Roman', Times, serif",
-            fontSize: "1.15em",
-            letterSpacing: "0.01em",
-            lineHeight: "1.6",
-            borderLeft: "4px solid #a78bfa",
-            background: "rgba(167, 139, 250, 0.05)",
-            margin: "1em 0",
-            padding: "16px 20px",
-            borderRadius: "0 12px 12px 0",
-            color: "rgba(255,255,255,0.95)",
-            boxShadow: "inset 40px 0 60px -40px rgba(167, 139, 250, 0.2)"
-          }}
-          {...props}
-        />
-      );
-    },
-    code({ node, inline, className, children, ...props }: any) {
-      const match = /language-(\w+)/.exec(className || "");
-      const codeString = String(children).replace(/\n$/, "");
-      const id = Math.random().toString(36).substring(7);
-
-      if (!inline) {
-        const lang = match ? match[1] : "code";
-        if (lang === "mermaid") {
-          return <MermaidDiagram code={codeString} />;
-        }
-
-        if (lang === "ask_user_input_v1") {
-          try {
-            let options: string[] = [];
-            try {
-              let cleaned = codeString.trim();
-              cleaned = cleaned.replace(/'/g, '"');
-              cleaned = cleaned.replace(/,\s*\]/g, ']');
-              options = JSON.parse(cleaned);
-            } catch (jsonErr) {
-              // Robust fallback: Extract all double/single-quoted items using regex
-              const matches = Array.from(codeString.matchAll(/["'](.*?)["']/g));
-              if (matches.length > 0) {
-                options = matches.map(m => m[1].replace(/^\*|\*$/g, '').trim());
-              } else {
-                throw jsonErr;
-              }
-            }
-
-            if (Array.isArray(options) && options.length > 0) {
-              return (
-                <div style={{ marginTop: 12, marginBottom: 12 }}>
-                  <button
-                    onClick={() => setInputModalOptions(options)}
-                    style={{
-                      background: "linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(192, 132, 252, 0.2))",
-                      border: "1px solid rgba(192, 132, 252, 0.5)",
-                      color: "#e9d5ff",
-                      padding: "10px 20px",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      transition: "all 0.2s",
-                      boxShadow: "0 4px 12px rgba(167,139,250,0.15)"
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 16px rgba(167,139,250,0.25)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(167,139,250,0.15)"; }}
-                  >
-                    <MousePointerClick size={16} /> Review Options
-                  </button>
-                </div>
-              );
-            }
-          } catch(e) {
-            console.error("Failed to parse ask_user_input_v1 options", e);
-          }
-        }
-
-        // Live preview languages: HTML, JSX, TSX, SVG, React
-        const livePreviewLangs = ["html", "htm", "jsx", "tsx", "react", "svg"];
-        const isPreviewable = livePreviewLangs.includes(lang);
-
+  const getMarkdownComponents = useCallback((isNewest: boolean, onSelectOption: (txt: string) => void): any => {
+    return {
+      table({ node, ...props }: any) {
         return (
-          <div className="relative rounded-lg overflow-hidden my-4 border border-white/10" style={{ maxWidth: "100%" }}>
-            <div className="flex items-center justify-between px-4 py-2 bg-black/40 text-xs text-slate-400" style={{ fontFamily: "'Inter', sans-serif" }}>
-              <span>{lang}</span>
-              <div style={{ display: "flex", gap: 12 }}>
-                {(lang === "csv" || lang === "json") && (
-                  <button
-                    onClick={() => downloadCodeAsCsv(codeString)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.45)' }}
-                    className="hover:text-white transition-colors flex items-center gap-1"
-                  >
-                    <FileText size={14} /> CSV
-                  </button>
-                )}
-
-                {isPreviewable && (
-                  <button
-                    onClick={() => setPreviewData({ code: codeString, language: lang })}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#60a5fa' }}
-                    className="hover:text-blue-300 transition-colors flex items-center gap-1"
-                  >
-                    <MonitorPlay size={14} /> Preview
-                  </button>
-                )}
-
-                <button
-                  onClick={() => copyText(codeString, id)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: copiedId === id ? '#34d399' : 'rgba(255,255,255,0.45)' }}
-                  className="hover:text-white transition-colors flex items-center gap-1"
-                >
-                  {copiedId === id ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedId === id ? "Copied!" : "Copy"}
-                </button>
-              </div>
-            </div>
-            <SyntaxHighlighter
-              {...props}
-              style={vscDarkPlus as any}
-              language={lang}
-              PreTag="div"
-              customStyle={{ margin: 0, borderRadius: 0, background: "#0d0d12", fontSize: 13, fontFamily: "'Fira Code', monospace" }}
-              codeTagProps={{ style: { fontFamily: "'Fira Code', monospace" } }}
-            >
-              {codeString}
-            </SyntaxHighlighter>
+          <div className="w-full overflow-x-auto my-4 rounded-xl border border-white/10" style={{ maxWidth: "100%" }}>
+            <table className="w-full text-sm text-left border-collapse" style={{ minWidth: 600 }} {...props} />
           </div>
         );
+      },
+      th({ node, ...props }: any) {
+        return <th className="px-4 py-3 border-b border-white/10 font-medium whitespace-nowrap" style={{ background: "rgba(255,255,255,0.06)", fontFamily: "'Outfit', sans-serif", fontSize: 14 }} {...props} />;
+      },
+      td({ node, ...props }: any) {
+        return <td className="px-4 py-3 border-b border-white/5" {...props} />;
+      },
+      h1({ node, ...props }: any) {
+        return <h1 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.8em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
+      },
+      h2({ node, ...props }: any) {
+        return <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.5em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
+      },
+      h3({ node, ...props }: any) {
+        return <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: "1.25em", fontWeight: 600, marginTop: "1em", marginBottom: "0.5em" }} {...props} />;
+      },
+      blockquote({ node, ...props }: any) {
+        return (
+          <blockquote
+            style={{
+              fontFamily: "'Times New Roman', Times, serif",
+              fontSize: "1.15em",
+              letterSpacing: "0.01em",
+              lineHeight: "1.6",
+              borderLeft: "4px solid #a78bfa",
+              background: "rgba(167, 139, 250, 0.05)",
+              margin: "1em 0",
+              padding: "16px 20px",
+              borderRadius: "0 12px 12px 0",
+              color: "rgba(255,255,255,0.95)",
+              boxShadow: "inset 40px 0 60px -40px rgba(167, 139, 250, 0.2)"
+            }}
+            {...props}
+          />
+        );
+      },
+      code({ node, inline, className, children, ...props }: any) {
+        const match = /language-(\w+)/.exec(className || "");
+        const codeString = String(children).replace(/\n$/, "");
+        const id = Math.random().toString(36).substring(7);
+
+        if (!inline) {
+          const lang = match ? match[1] : "code";
+          if (lang === "mermaid") {
+            return <MermaidDiagram code={codeString} />;
+          }
+
+          if (lang === "ask_user_input_v1") {
+            try {
+              let options: string[] = [];
+              try {
+                let cleaned = codeString.trim();
+                cleaned = cleaned.replace(/'/g, '"');
+                cleaned = cleaned.replace(/,\s*\]/g, ']');
+                options = JSON.parse(cleaned);
+              } catch (jsonErr) {
+                // Robust fallback: Extract all double/single-quoted items using regex
+                const matches = Array.from(codeString.matchAll(/["'](.*?)["']/g));
+                if (matches.length > 0) {
+                  options = matches.map(m => m[1].replace(/^\*|\*$/g, '').trim());
+                } else {
+                  throw jsonErr;
+                }
+              }
+
+              if (Array.isArray(options) && options.length > 0) {
+                const type = classifyOptions(options);
+                const recIdx = getRecommendedOptionIndex(options);
+
+                return (
+                  <div style={{ 
+                    marginTop: 16, 
+                    marginBottom: 16, 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    gap: type === "binary" || type === "color" ? 10 : 8,
+                    width: "100%",
+                    maxWidth: 500,
+                    opacity: isNewest ? 1 : 0.65,
+                    pointerEvents: isNewest ? "auto" : "none"
+                  }}>
+                    {/* Title indicator */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                      <MousePointerClick size={12} color="#a78bfa" />
+                      <span>{isNewest ? "Choose an Option to Proceed:" : "Selection Complete:"}</span>
+                    </div>
+
+                    {/* 1. BINARY inline layout */}
+                    {type === "binary" && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        {options.map((opt, i) => {
+                          const isRec = i === recIdx;
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => onSelectOption(String(opt))}
+                              disabled={!isNewest}
+                              style={{
+                                padding: "12px 14px",
+                                background: isRec ? "rgba(167, 139, 250, 0.08)" : "rgba(255, 255, 255, 0.03)",
+                                border: isRec ? "1px solid rgba(167, 139, 250, 0.45)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: 10,
+                                color: isRec ? "#e9d5ff" : "rgba(255,255,255,0.8)",
+                                fontSize: 13,
+                                fontWeight: 600,
+                                cursor: isNewest ? "pointer" : "default",
+                                transition: "all 0.2s ease",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                boxShadow: isRec ? "0 4px 12px rgba(167, 139, 250, 0.1)" : "none"
+                              }}
+                              onMouseEnter={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = "rgba(167, 139, 250, 0.14)";
+                                e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                                e.currentTarget.style.transform = "translateY(-1.5px)";
+                              }}
+                              onMouseLeave={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.08)" : "rgba(255, 255, 255, 0.03)";
+                                e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.45)" : "rgba(255, 255, 255, 0.08)";
+                                e.currentTarget.style.transform = "translateY(0)";
+                              }}
+                            >
+                              {isRec ? <Sparkles size={13} color="#c084fc" /> : <Check size={13} color="rgba(255,255,255,0.4)" />}
+                              <span>{String(opt)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 2. COLOR inline layout */}
+                    {type === "color" && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        {options.map((opt, i) => {
+                          const isRec = i === recIdx;
+                          let gradient = "linear-gradient(135deg, #4f46e5, #06b6d4)";
+                          const text = String(opt).toLowerCase();
+                          if (text.includes("dark") || text.includes("nebula") || text.includes("space")) {
+                            gradient = "linear-gradient(135deg, #1e1b4b, #311042)";
+                          } else if (text.includes("light")) {
+                            gradient = "linear-gradient(135deg, #e0f2fe, #bae6fd)";
+                          } else if (text.includes("emerald") || text.includes("green")) {
+                            gradient = "linear-gradient(135deg, #064e3b, #10b981)";
+                          } else if (text.includes("amber") || text.includes("rose") || text.includes("warm")) {
+                            gradient = "linear-gradient(135deg, #881337, #f43f5e)";
+                          } else if (text.includes("indigo") || text.includes("violet") || text.includes("galaxy")) {
+                            gradient = "linear-gradient(135deg, #3b0764, #6366f1)";
+                          }
+
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => onSelectOption(String(opt))}
+                              disabled={!isNewest}
+                              style={{
+                                padding: "10px",
+                                background: isRec ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.02)",
+                                border: isRec ? "1px solid rgba(167, 139, 250, 0.45)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: 10,
+                                color: "#fff",
+                                cursor: isNewest ? "pointer" : "default",
+                                transition: "all 0.2s ease",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 8,
+                                textAlign: "left"
+                              }}
+                              onMouseEnter={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
+                                e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                                e.currentTarget.style.transform = "translateY(-1.5px)";
+                              }}
+                              onMouseLeave={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = isRec ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.02)";
+                                e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.45)" : "rgba(255, 255, 255, 0.08)";
+                                e.currentTarget.style.transform = "translateY(0)";
+                              }}
+                            >
+                              <div style={{ width: "100%", height: 32, borderRadius: 6, background: gradient, border: "1px solid rgba(255,255,255,0.08)" }} />
+                              <span style={{ fontSize: 12, fontWeight: 500 }}>{String(opt)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 3. PRIORITY inline layout */}
+                    {type === "priority" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {options.map((opt, i) => {
+                          const isRec = i === recIdx;
+                          const text = String(opt).toLowerCase();
+                          let Icon = Cpu;
+                          if (text.includes("speed") || text.includes("fast") || text.includes("groq")) Icon = Zap;
+                          else if (text.includes("accuracy") || text.includes("deep") || text.includes("quality") || text.includes("reasoning")) Icon = Brain;
+                          else if (text.includes("hybrid") || text.includes("balanced")) Icon = RefreshCw;
+                          else if (text.includes("secure") || text.includes("private") || text.includes("local")) Icon = Server;
+
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => onSelectOption(String(opt))}
+                              disabled={!isNewest}
+                              style={{
+                                padding: "10px 14px",
+                                background: isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255, 255, 255, 0.02)",
+                                border: isRec ? "1px solid rgba(167, 139, 250, 0.45)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: 10,
+                                color: "rgba(255,255,255,0.85)",
+                                cursor: isNewest ? "pointer" : "default",
+                                transition: "all 0.15s ease",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10
+                              }}
+                              onMouseEnter={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = "rgba(167, 139, 250, 0.09)";
+                                e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                              }}
+                              onMouseLeave={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255, 255, 255, 0.02)";
+                                e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.45)" : "rgba(255, 255, 255, 0.08)";
+                              }}
+                            >
+                              <Icon size={14} color={isRec ? "#a78bfa" : "rgba(255,255,255,0.5)"} />
+                              <span style={{ fontSize: 13, fontWeight: 500, flex: 1, textAlign: "left" }}>{String(opt)}</span>
+                              {isRec && <span style={{ fontSize: 9, background: "rgba(167, 139, 250, 0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: 4, fontWeight: 600 }}>REC</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 4. STANDARD inline layout */}
+                    {type === "standard" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {options.map((opt, i) => {
+                          const isRec = i === recIdx;
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => onSelectOption(String(opt))}
+                              disabled={!isNewest}
+                              style={{
+                                padding: "10px 14px",
+                                background: isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255, 255, 255, 0.02)",
+                                border: isRec ? "1px solid rgba(167, 139, 250, 0.45)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: 8,
+                                color: isRec ? "#e9d5ff" : "rgba(255,255,255,0.8)",
+                                fontSize: 13,
+                                fontWeight: isRec ? 600 : 400,
+                                cursor: isNewest ? "pointer" : "default",
+                                transition: "all 0.15s ease",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between"
+                              }}
+                              onMouseEnter={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = "rgba(167, 139, 250, 0.09)";
+                                e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.6)";
+                              }}
+                              onMouseLeave={e => {
+                                if (!isNewest) return;
+                                e.currentTarget.style.background = isRec ? "rgba(167, 139, 250, 0.05)" : "rgba(255, 255, 255, 0.02)";
+                                e.currentTarget.style.borderColor = isRec ? "rgba(167, 139, 250, 0.45)" : "rgba(255, 255, 255, 0.08)";
+                              }}
+                            >
+                              <span>{String(opt)}</span>
+                              {isRec && (
+                                <span style={{ fontSize: 9, background: "rgba(167, 139, 250, 0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: 4, fontWeight: 600, display: "flex", alignItems: "center", gap: 2 }}>
+                                  <Sparkles size={8} /> REC
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add a direct custom text option inline */}
+                    {isNewest && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                        <input
+                          type="text"
+                          placeholder="Or write custom choice..."
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                              onSelectOption(e.currentTarget.value.trim());
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                          style={{ 
+                            flex: 1, 
+                            background: "rgba(255,255,255,0.03)", 
+                            border: "1px solid rgba(255,255,255,0.08)", 
+                            borderRadius: 6, 
+                            padding: "6px 10px", 
+                            color: "#fff", 
+                            fontSize: 12, 
+                            outline: "none" 
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+            } catch(e) {
+              console.error("Failed to parse ask_user_input_v1 options", e);
+            }
+          }
+
+          // Live preview languages: HTML, JSX, TSX, SVG, React
+          const livePreviewLangs = ["html", "htm", "jsx", "tsx", "react", "svg"];
+          const isPreviewable = livePreviewLangs.includes(lang);
+
+          return (
+            <div className="relative rounded-lg overflow-hidden my-4 border border-white/10" style={{ maxWidth: "100%" }}>
+              <div className="flex items-center justify-between px-4 py-2 bg-black/40 text-xs text-slate-400" style={{ fontFamily: "'Inter', sans-serif" }}>
+                <span>{lang}</span>
+                <div style={{ display: "flex", gap: 12 }}>
+                  {(lang === "csv" || lang === "json") && (
+                    <button
+                      onClick={() => downloadCodeAsCsv(codeString)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.45)' }}
+                      className="hover:text-white transition-colors flex items-center gap-1"
+                    >
+                      <FileText size={14} /> CSV
+                    </button>
+                  )}
+
+                  {isPreviewable && (
+                    <button
+                      onClick={() => setPreviewData({ code: codeString, language: lang })}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#60a5fa' }}
+                      className="hover:text-blue-300 transition-colors flex items-center gap-1"
+                    >
+                      <MonitorPlay size={14} /> Preview
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => copyText(codeString, id)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: copiedId === id ? '#34d399' : 'rgba(255,255,255,0.45)' }}
+                    className="hover:text-white transition-colors flex items-center gap-1"
+                  >
+                    {copiedId === id ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedId === id ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+              <SyntaxHighlighter
+                {...props}
+                style={vscDarkPlus as any}
+                language={lang}
+                PreTag="div"
+                customStyle={{ margin: 0, borderRadius: 0, background: "#0d0d12", fontSize: 13, fontFamily: "'Fira Code', monospace" }}
+                codeTagProps={{ style: { fontFamily: "'Fira Code', monospace" } }}
+              >
+                {codeString}
+              </SyntaxHighlighter>
+            </div>
+          );
+        }
+        return (
+          <code {...props} className={`${className || ''} bg-black/30 text-emerald-400 px-1.5 py-0.5 rounded-md text-sm`} style={{ fontFamily: "'Fira Code', monospace" }}>
+            {children}
+          </code>
+        );
+      },
+      ul({ node, ...props }: any) {
+        return <ul className="list-disc pl-6 my-4 space-y-2" {...props} />;
+      },
+      ol({ node, ...props }: any) {
+        return <ol className="list-decimal pl-6 my-4 space-y-2" {...props} />;
+      },
+      li({ node, ...props }: any) {
+        return <li className="text-white/80 leading-relaxed" {...props} />;
+      },
+      p({ node, ...props }: any) {
+        return <p className="my-3 leading-relaxed" {...props} />;
+      },
+      strong({ node, ...props }: any) {
+        return <strong className="font-bold text-white" style={{ textShadow: "0 0 12px rgba(255,255,255,0.2)" }} {...props} />;
       }
-      return (
-        <code {...props} className={`${className || ''} bg-black/30 text-emerald-400 px-1.5 py-0.5 rounded-md text-sm`} style={{ fontFamily: "'Fira Code', monospace" }}>
-          {children}
-        </code>
-      );
-    },
-    ul({ node, ...props }: any) {
-      return <ul className="list-disc pl-6 my-4 space-y-2" {...props} />;
-    },
-    ol({ node, ...props }: any) {
-      return <ol className="list-decimal pl-6 my-4 space-y-2" {...props} />;
-    },
-    li({ node, ...props }: any) {
-      return <li className="text-white/80 leading-relaxed" {...props} />;
-    },
-    p({ node, ...props }: any) {
-      return <p className="my-3 leading-relaxed" {...props} />;
-    },
-    strong({ node, ...props }: any) {
-      return <strong className="font-bold text-white" style={{ textShadow: "0 0 12px rgba(255,255,255,0.2)" }} {...props} />;
-    }
-  };
+    };
+  }, [classifyOptions, getRecommendedOptionIndex, copiedId, copyText, downloadCodeAsCsv, setPreviewData]);
 
   function closeAll() {
     setShowHistory(false); setShowSettings(false);
@@ -2911,7 +3142,6 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
             onClick={() => {
               if (window.electron && window.electron.ipcRenderer) {
                 window.electron.ipcRenderer.invoke('updater:checkForUpdates');
-                closeAll();
               }
             }}
             style={{
@@ -2929,11 +3159,17 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
               background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.25)",
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}>
-              <Download size={12} style={{ color: "#38bdf8" }} />
+              <RefreshCw size={12} style={{ color: "#38bdf8" }} className={updateStatus === 'checking' ? 'animate-spin' : ''} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ color: "#bae6fd", fontSize: 12, fontWeight: 600 }}>System Updates</div>
-              <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>Check for new versions</div>
+              <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>
+                {updateStatus === 'checking' ? 'Checking...' :
+                 updateStatus === 'downloading' ? `Downloading ${updateProgress}%` :
+                 updateStatus === 'ready' ? 'Update ready to install' :
+                 updateStatus === 'available' ? 'Update available!' :
+                 'Check for new versions'}
+              </div>
             </div>
             <ChevronRight size={12} style={{ color: "rgba(56,189,248,0.5)" }} />
           </button>
@@ -4721,7 +4957,7 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
                             <TypewriterMarkdown
                               isNewest={!isUser && msg.id === messages[messages.length - 1]?.id}
                               content={displayText}
-                              components={markdownComponents}
+                              components={getMarkdownComponents(!isUser && msg.id === messages[messages.length - 1]?.id, send)}
                             />
                           </div>
                         </div>
@@ -5272,7 +5508,7 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
                       <TypewriterMarkdown
                         isNewest={msg.id === incognitoMessages[incognitoMessages.length - 1]?.id}
                         content={msg.content}
-                        components={markdownComponents}
+                        components={getMarkdownComponents(msg.id === incognitoMessages[incognitoMessages.length - 1]?.id, sendIncognito)}
                       />
                     </div>
                   )}
