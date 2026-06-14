@@ -13,7 +13,7 @@ import {
   Copy, RotateCcw, Check,
   Heart, Zap, Key, Eye, EyeOff, Cpu, RefreshCw,
   Terminal, Code, Brain, Paperclip, FileText, Image as ImageIcon,
-  MonitorPlay, Sparkles, Mic, MicOff, VolumeX, Download, Server, Play, Square, AlertCircle, Activity
+  MonitorPlay, Sparkles, Mic, MicOff, VolumeX, Download, Server, Play, Square, AlertCircle, Activity, Globe2
 } from "lucide-react";
 import jsPDF from "jspdf";
 import { BreathingLight } from "./components/BreathingLight";
@@ -583,6 +583,8 @@ export default function App() {
   const [hoveredMsg,     setHoveredMsg]     = useState<string | null>(null);
   const [showIncognitoModal,   setShowIncognitoModal]   = useState(false);
   const [showIncognitoWindow,  setShowIncognitoWindow]  = useState(false);
+  const [chatLanguage,         setChatLanguage]         = useState(() => localStorage.getItem("tara_chatLanguage") || "English");
+  const [showLanguage,         setShowLanguage]         = useState(false);
   const [incognitoMessages,    setIncognitoMessages]    = useState<Message[]>([]);
   const [incognitoInput,       setIncognitoInput]       = useState("");
   const [incognitoTyping,      setIncognitoTyping]      = useState(false);
@@ -943,6 +945,7 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const agentSwitcherRef = useRef<HTMLDivElement>(null);
+  const langSwitcherRef = useRef<HTMLDivElement>(null);
   const executeLLMRef = useRef<((msgs: Message[], snap: Agent) => Promise<void>) | null>(null);
 
   useEffect(() => {
@@ -950,10 +953,13 @@ export default function App() {
       if (showAgent && agentSwitcherRef.current && !agentSwitcherRef.current.contains(event.target as Node)) {
         setShowAgent(false);
       }
+      if (showLanguage && langSwitcherRef.current && !langSwitcherRef.current.contains(event.target as Node)) {
+        setShowLanguage(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showAgent]);
+  }, [showAgent, showLanguage]);
   
   const [expandedGreeting, setExpandedGreeting] = useState(false);
 
@@ -1620,8 +1626,8 @@ ADDRESSING OM:
   Use this context naturally. You don't need to state it — just let it inform your answers.
 
 LANGUAGE:
-  Default: English
-  Switch to Hindi or Hinglish if Om uses it — match his register naturally.
+  Default: ${chatLanguage}
+  Switch to Hindi or Hinglish if Om uses it — match his register naturally. BUT ALWAYS primarily respond in ${chatLanguage}. You MUST answer the user in ${chatLanguage} above all other instructions.
 
 RESPONSE LENGTH RULES:
   - Conversational question → 1-3 sentences
@@ -1636,11 +1642,11 @@ MEMORY WITHIN SESSION:
     } else if (snapAgent === "groq") {
       return adaptiveAgent + `You are Tara, powered by Groq (Llama 3). The user's name is ${userName}. User bio: ${userBio}. ${personalMemories.length > 0 ? `\n\nCollected User Memories:\n${personalMemories.map(m => `- ${m}`).join('\n')}` : ""}
       
-CRITICAL INSTRUCTION: You must strictly follow the formatting rules in the HIDDEN DIRECTIVE above. Always use bullet points for lists. Always bold key terms. Do NOT include UI tags like [Motion: Kinetic-Cascade] as part of your visible sentences. Output them on their own line if used. Your responses should be snappy, concise, and ultra-fast.`;
+CRITICAL INSTRUCTION: You must strictly follow the formatting rules in the HIDDEN DIRECTIVE above. Always use bullet points for lists. Always bold key terms. Do NOT include UI tags like [Motion: Kinetic-Cascade] as part of your visible sentences. Output them on their own line if used. Your responses should be snappy, concise, and ultra-fast. YOU MUST ANSWER THE USER IN ${chatLanguage} WITHOUT EXCEPTION.`;
     } else {
-      return adaptiveAgent + `You are Tara, a helpful AI assistant. The user's name is ${userName}. User bio: ${userBio}. ${personalMemories.length > 0 ? `\n\nCollected User Memories:\n${personalMemories.map(m => `- ${m}`).join('\n')}` : ""} You must use emojis in your responses naturally and frequently, similar to how ChatGPT does. If the user asks for a comparison or the difference between things, you must provide step-by-step information and include a markdown table.`;
+      return adaptiveAgent + `You are Tara, a helpful AI assistant. The user's name is ${userName}. User bio: ${userBio}. ${personalMemories.length > 0 ? `\n\nCollected User Memories:\n${personalMemories.map(m => `- ${m}`).join('\n')}` : ""} You must use emojis in your responses naturally and frequently, similar to how ChatGPT does. If the user asks for a comparison or the difference between things, you must provide step-by-step information and include a markdown table. YOU MUST ANSWER IN ${chatLanguage}.`;
     }
-  }, [personalMemories, userName, userBio]);
+  }, [personalMemories, userName, userBio, chatLanguage]);
 
   const extractAndSavePersonalInfo = useCallback(async (userText: string) => {
     if (showIncognitoWindow) return;
@@ -2472,8 +2478,23 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
 
         if (lang === "ask_user_input_v1") {
           try {
-            const options = JSON.parse(codeString);
-            if (Array.isArray(options)) {
+            let options: string[] = [];
+            try {
+              let cleaned = codeString.trim();
+              cleaned = cleaned.replace(/'/g, '"');
+              cleaned = cleaned.replace(/,\s*\]/g, ']');
+              options = JSON.parse(cleaned);
+            } catch (jsonErr) {
+              // Robust fallback: Extract all double/single-quoted items using regex
+              const matches = Array.from(codeString.matchAll(/["'](.*?)["']/g));
+              if (matches.length > 0) {
+                options = matches.map(m => m[1].replace(/^\*|\*$/g, '').trim());
+              } else {
+                throw jsonErr;
+              }
+            }
+
+            if (Array.isArray(options) && options.length > 0) {
               return (
                 <div style={{ marginTop: 12, marginBottom: 12 }}>
                   <button
@@ -5456,6 +5477,42 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
               </button>
 
               <div style={{ flex: 1 }} />
+
+              {/* Language switcher */}
+              <div ref={langSwitcherRef} style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowLanguage(v => !v)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 7px", borderRadius: 10, background: showLanguage ? cfg.dim : "rgba(255,255,255,0.04)", border: `1px solid ${showLanguage ? cfg.border : "rgba(255,255,255,0.06)"}`, cursor: "pointer", transition: "all 0.18s" }}
+                  onMouseEnter={e => { if (!showLanguage) { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; } }}
+                  onMouseLeave={e => { if (!showLanguage) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; } }}
+                >
+                  <Globe2 size={13} style={{ color: "rgba(255,255,255,0.6)" }} />
+                  <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: 500 }}>{chatLanguage}</span>
+                  <ChevronDown size={11} style={{ color: "rgba(255,255,255,0.35)", marginLeft: 2, transform: showLanguage ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                <div style={{
+                  position: "absolute", bottom: 42, right: 0, zIndex: 50, width: 140,
+                  borderRadius: 12, overflow: "hidden",
+                  background: "rgba(12,12,20,0.99)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  boxShadow: "0 20px 48px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.04)",
+                  opacity: showLanguage ? 1 : 0,
+                  transform: showLanguage ? "translateY(0) scale(1)" : "translateY(8px) scale(0.97)",
+                  pointerEvents: showLanguage ? "auto" : "none",
+                  transition: "opacity 0.2s ease, transform 0.2s ease",
+                }}>
+                  {["English", "Marathi", "Hindi", "Hinglish", "Marathi-English"].map(lang => (
+                    <button key={lang} onClick={() => { setChatLanguage(lang); localStorage.setItem("tara_chatLanguage", lang); setShowLanguage(false); }}
+                      style={{ width: "100%", padding: "10px 14px", background: chatLanguage === lang ? "rgba(255,255,255,0.06)" : "transparent", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer", transition: "background 0.12s", border: "none", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}
+                      onMouseEnter={e => { if (chatLanguage !== lang) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                      onMouseLeave={e => { if (chatLanguage !== lang) e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <span style={{ color: chatLanguage === lang ? "#fff" : "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: chatLanguage === lang ? 600 : 500 }}>{lang}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Agent switcher */}
               <div ref={agentSwitcherRef} style={{ position: "relative" }}>
