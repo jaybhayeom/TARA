@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, clipboard, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, clipboard, shell, net } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -290,10 +290,10 @@ app.whenReady().then(() => {
                 console.log('[TARA Auth] Token exchange to:', 'https://oauth2.googleapis.com/token');
                 console.log('[TARA Auth] redirect_uri:', redirectUri);
                 
-                const fetchResponse = await fetch('https://oauth2.googleapis.com/token', {
+                const fetchResponse = await net.fetch('https://oauth2.googleapis.com/token', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: tokenBody
+                  body: tokenBody.toString()
                 });
                 
                 const data = await fetchResponse.json();
@@ -527,6 +527,14 @@ app.whenReady().then(() => {
   ipcMain.handle('updater:checkForUpdates', () => {
     if (!isDev) {
       autoUpdater.checkForUpdates();
+    } else {
+      // Mock updater behavior in dev mode for UI testing
+      if (mainWindow) {
+        mainWindow.webContents.send('updater:message', { type: 'checking' });
+        setTimeout(() => {
+          mainWindow.webContents.send('updater:message', { type: 'update-not-available' });
+        }, 1500);
+      }
     }
     return true;
   });
