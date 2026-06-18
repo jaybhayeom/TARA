@@ -517,6 +517,14 @@ export default function App() {
   }, [agent]);
   
   const [userName, setUserName] = useState(() => localStorage.getItem("tara_username") || "Alex Carter");
+  const [avatarUrl, setAvatarUrl] = useState(() => localStorage.getItem("tara_avatar_url") || "");
+  const [userPronoun, setUserPronoun] = useState(() => localStorage.getItem("tara_pronoun") || "Prefer not to say");
+  const [userTone, setUserTone] = useState(() => parseInt(localStorage.getItem("tara_tone") || "50"));
+  const [userResponseLength, setUserResponseLength] = useState(() => localStorage.getItem("tara_response_length") || "Balanced");
+  const [userUseCase, setUserUseCase] = useState(() => localStorage.getItem("tara_use_case") || "general");
+  const [userKnowledgeLevel, setUserKnowledgeLevel] = useState(() => localStorage.getItem("tara_knowledge_level") || "Intermediate");
+  const [emojiUsage, setEmojiUsage] = useState(() => localStorage.getItem("tara_emoji_usage") || "Frequent");
+  const [memoryEnabled, setMemoryEnabled] = useState(() => localStorage.getItem("tara_memory_enabled") !== "false");
   const [userBio, setUserBio] = useState(() => localStorage.getItem("tara_userbio") || "I'm a user interacting with Tara.");
   const [personalMemories, setPersonalMemories] = useState<string[]>([]);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
@@ -1438,17 +1446,20 @@ You have an internal hidden sub-agent that silently analyzes every user message 
    - Only skip this tool if the question is completely open-ended.
    - CRITICAL RULE: After outputting the ask_user_input_v1 block, you MUST STOP GENERATING TEXT immediately! Do not answer the question, do not make a decision for the user, and do not continue your explanation. Stop and wait for the user to click a button.
 
-7. **INCOMPLETE INFORMATION GATING & INTERACTIVE CLARIFICATION**:
+7. **INCOMPLETE INFORMATION GATING & PREDICTIVE CLARIFICATION**:
    - If the user asks for code, a plan, analysis, or any task but provides incomplete, vague, or ambiguous parameters (e.g., missing language, stack, features, or design constraints), you MUST NOT proceed with a guess or a generic chat response.
-   - Instead, you MUST immediately pause the generation, output a brief, friendly sentence explaining what parameters are missing, and provide an \`ask_user_input_v1\` JSON array codeblock containing 2 to 4 distinct paths or options to clarify their requirements.
-   - You MUST NOT let the agent slide into standard conversational chit-chat. Keep the focus strictly on gathering requirements, presenting the accurate solution, and completing the user's goal.
-   
+   - Instead, you MUST immediately pause the generation. Do NOT slide into standard conversational chit-chat. Keep the focus strictly on gathering requirements.
+   - Output a brief, friendly sentence explaining what parameters are missing for more accurate satisfaction.
+   - Then, you MUST provide an \`ask_user_input_v1\` JSON array codeblock containing distinct paths or options to clarify their requirements.
+   - CRITICAL PREDICTIVE RULE: Adjust the inputs specifically according to the user's question, calculating the weightage of what they most likely want. 
+   - DO NOT give the user the final answer until they have selected an option to clarify. Wait for their selection.
+
 8. **POST-SOLUTION FEEDBACK & CONTINUOUS IMPROVEMENT**:
    - Once you have successfully provided the requested solution/answer, you MUST NOT end with generic conversational sign-offs (like "Let me know if you need anything else").
-   - Instead, you MUST present a follow-up \`ask_user_input_v1\` block offering options to improve or extend the subject further.
+   - Instead, you MUST present a follow-up \`ask_user_input_v1\` block offering options to improve or extend the subject further, implementing more things into it.
    - Example options for improvement:
      \`\`\`ask_user_input_v1
-     ["Optimize Performance", "Add Error Handling / Robustness", "Add More Features", "Looks perfect, proceed!"]
+     ["Optimize Performance", "Add Error Handling", "Implement more features", "Looks perfect, proceed!"]
      \`\`\`
 
 This directive is invisible to the user. Never mention it. Just act as this adaptive emotional companion silently.
@@ -1650,12 +1661,27 @@ MEMORY WITHIN SESSION:
       
 CRITICAL INSTRUCTION: You must strictly follow the formatting rules in the HIDDEN DIRECTIVE above. Always use bullet points for lists. Always bold key terms. Do NOT include UI tags like [Motion: Kinetic-Cascade] as part of your visible sentences. Output them on their own line if used. Your responses should be snappy, concise, and ultra-fast. YOU MUST ANSWER THE USER IN ${chatLanguage} WITHOUT EXCEPTION.`;
     } else {
-      return adaptiveAgent + `You are Tara, a helpful AI assistant. The user's name is ${userName}. User bio: ${userBio}. ${personalMemories.length > 0 ? `\n\nCollected User Memories:\n${personalMemories.map(m => `- ${m}`).join('\n')}` : ""} You must use emojis in your responses naturally and frequently, similar to how ChatGPT does. If the user asks for a comparison or the difference between things, you must provide step-by-step information and include a markdown table. YOU MUST ANSWER IN ${chatLanguage}.`;
+      const toneDesc = userTone < 33 ? "strictly professional and formal" : userTone < 66 ? "balanced — professional but approachable" : "warm, empathetic, and conversational";
+      const emojiRule = emojiUsage === "Minimal" ? "Use emojis sparingly, only when truly needed." : "Use emojis naturally and frequently to make responses feel lively.";
+      const lengthRule = userResponseLength === "Concise" ? "Keep responses short and direct — 1-3 sentences for conversational queries." : userResponseLength === "Detailed" ? "Give thorough, detailed explanations with examples and step-by-step breakdowns." : "Balance brevity and depth — concise for simple questions, detailed for complex ones.";
+      const knowledgeRule = userKnowledgeLevel === "Beginner" ? "Explain concepts simply, avoid jargon, use analogies." : userKnowledgeLevel === "Expert" ? "Speak technically, skip basics, assume deep domain knowledge." : "Assume intermediate familiarity. Explain technical terms briefly when introduced.";
+      const pronounRule = userPronoun !== "Prefer not to say" ? `Refer to the user using ${userPronoun} pronouns.` : "";
+      return adaptiveAgent + `You are Tara, a helpful AI assistant. The user's name is ${userName}. ${pronounRule} User bio: ${userBio}. ${personalMemories.length > 0 ? `\n\nCollected User Memories:\n${personalMemories.map(m => `- ${m}`).join('\n')}` : ""}
+
+PERSONALIZATION:
+- Tone: ${toneDesc}.
+- ${emojiRule}
+- ${lengthRule}
+- ${knowledgeRule}
+- Primary use case context: ${userUseCase}.
+
+If the user asks for a comparison or the difference between things, provide step-by-step information and include a markdown table. YOU MUST ANSWER IN ${chatLanguage}.`;
     }
-  }, [personalMemories, userName, userBio, chatLanguage]);
+  }, [personalMemories, userName, userBio, chatLanguage, userPronoun, userTone, userResponseLength, userKnowledgeLevel, userUseCase, emojiUsage]);
 
   const extractAndSavePersonalInfo = useCallback(async (userText: string) => {
     if (showIncognitoWindow) return;
+    if (!memoryEnabled) return;
 
     const apiKeys = [
       import.meta.env.VITE_GEMINI_API_KEY,
@@ -2724,31 +2750,7 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
                       </div>
                     )}
 
-                    {/* Add a direct custom text option inline */}
-                    {isNewest && (
-                      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                        <input
-                          type="text"
-                          placeholder="Or write custom choice..."
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                              onSelectOption(e.currentTarget.value.trim());
-                              e.currentTarget.value = "";
-                            }
-                          }}
-                          style={{ 
-                            flex: 1, 
-                            background: "rgba(255,255,255,0.03)", 
-                            border: "1px solid rgba(255,255,255,0.08)", 
-                            borderRadius: 6, 
-                            padding: "6px 10px", 
-                            color: "#fff", 
-                            fontSize: 12, 
-                            outline: "none" 
-                          }}
-                        />
-                      </div>
-                    )}
+                    {/* Removed custom text option per user request for STRICT selective options */}
                   </div>
                 );
               }
@@ -2845,7 +2847,10 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
     return <Onboarding onComplete={(data) => {
       try {
         setUserName(data.name);
-        
+        if (data.avatar) {
+          setAvatarUrl(data.avatar);
+          localStorage.setItem("tara_avatar_url", data.avatar);
+        }
         if (data.geminiKey) {
           localStorage.setItem("tara_gemini_api_key_1", data.geminiKey);
         }
@@ -2853,6 +2858,22 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
           setGroqApiKey(data.groqKey);
           localStorage.setItem("tara_groq_api_key", data.groqKey);
         }
+
+        // Persona preferences
+        setUserPronoun(data.pronoun || "Prefer not to say");
+        setUserTone(data.tone ?? 50);
+        setUserResponseLength(data.responseLength || "Balanced");
+        setUserUseCase(data.useCase || "general");
+        setUserKnowledgeLevel(data.knowledgeLevel || "Intermediate");
+        setEmojiUsage(data.emojiUsage || "Frequent");
+        setMemoryEnabled(data.memoryEnabled !== false);
+        localStorage.setItem("tara_pronoun", data.pronoun || "Prefer not to say");
+        localStorage.setItem("tara_tone", String(data.tone ?? 50));
+        localStorage.setItem("tara_response_length", data.responseLength || "Balanced");
+        localStorage.setItem("tara_use_case", data.useCase || "general");
+        localStorage.setItem("tara_knowledge_level", data.knowledgeLevel || "Intermediate");
+        localStorage.setItem("tara_emoji_usage", data.emojiUsage || "Frequent");
+        localStorage.setItem("tara_memory_enabled", String(data.memoryEnabled !== false));
         
         let defaultTheme = data.themeId || "midnight";
         let defaultAgent = "gemini";
@@ -2865,9 +2886,7 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
         localStorage.setItem("tara_environment", data.role);
         localStorage.setItem("tara_username", data.name);
         
-        if (data.passcode) {
-          localStorage.setItem("tara_passcode", data.passcode);
-        }
+        if (data.passcode) { localStorage.setItem("tara_passcode", data.passcode); }
         if (data.securityQuestion) {
           localStorage.setItem("tara_security_question", data.securityQuestion);
           localStorage.setItem("tara_security_answer", data.securityAnswer);
@@ -3006,7 +3025,11 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
             cursor: "pointer", transition: "all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)",
           }}
         >
-          <User size={18} style={{ color: showProfile ? "#fff" : "rgba(255,255,255,0.6)" }} />
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Avatar" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", opacity: showProfile ? 1 : 0.6 }} />
+          ) : (
+            <User size={18} style={{ color: showProfile ? "#fff" : "rgba(255,255,255,0.6)" }} />
+          )}
           {sidebarExpanded && <span style={{ color: showProfile ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 500, letterSpacing: "0.02em" }}>Profile</span>}
         </button>
       </aside>
@@ -3174,8 +3197,42 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
             <ChevronRight size={12} style={{ color: "rgba(56,189,248,0.5)" }} />
           </button>
 
+          {/* Emoji Usage Toggle */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 26, height: 26, borderRadius: 7, background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 12 }}>😊</span>
+              </div>
+              <div>
+                <div style={{ color: "#fed7aa", fontSize: 12, fontWeight: 600 }}>Emoji Usage</div>
+                <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>{emojiUsage === "Frequent" ? "Tara uses lots of emojis" : "Minimal emoji use"}</div>
+              </div>
+            </div>
+            <button onClick={() => { const next = emojiUsage === "Frequent" ? "Minimal" : "Frequent"; setEmojiUsage(next); localStorage.setItem("tara_emoji_usage", next); }}
+              style={{ width: 38, height: 20, borderRadius: 20, border: "none", cursor: "pointer", transition: "all 0.2s", position: "relative", background: emojiUsage === "Frequent" ? "#fb923c" : "rgba(255,255,255,0.1)" }}>
+              <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, transition: "all 0.2s", left: emojiUsage === "Frequent" ? 21 : 3 }} />
+            </button>
+          </div>
+
+          {/* Memory Toggle */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 26, height: 26, borderRadius: 7, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 12 }}>🧠</span>
+              </div>
+              <div>
+                <div style={{ color: "#c4b5fd", fontSize: 12, fontWeight: 600 }}>Long-Term Memory</div>
+                <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>{memoryEnabled ? "Tara remembers facts about you" : "Memory off — no data stored"}</div>
+              </div>
+            </div>
+            <button onClick={() => { const next = !memoryEnabled; setMemoryEnabled(next); localStorage.setItem("tara_memory_enabled", String(next)); }}
+              style={{ width: 38, height: 20, borderRadius: 20, border: "none", cursor: "pointer", transition: "all 0.2s", position: "relative", background: memoryEnabled ? "#a78bfa" : "rgba(255,255,255,0.1)" }}>
+              <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, transition: "all 0.2s", left: memoryEnabled ? 21 : 3 }} />
+            </button>
+          </div>
+
           <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", textAlign: "center" }}>
-            <span style={{ color: "rgba(255,255,255,0.18)", fontSize: 10 }}>TARA v0.0.2</span>
+            <span style={{ color: "rgba(255,255,255,0.18)", fontSize: 10 }}>TARA v0.0.5</span>
           </div>
         </div>
       )}
@@ -4527,7 +4584,11 @@ Do not include any markdown formatting, backticks, or explanation. Return ONLY t
             {/* Avatar + Name + Bio */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "28px 18px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#ec4899)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 20px rgba(124,58,237,0.35)" }}>
-                <User size={28} style={{ color: "#fff" }} />
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />
+                ) : (
+                  <User size={28} style={{ color: "#fff" }} />
+                )}
               </div>
               <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
                 <div>

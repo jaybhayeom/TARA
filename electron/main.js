@@ -7,6 +7,9 @@ import http from 'http';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
 import pkgUpdater from 'electron-updater';
+import dotenv from 'dotenv';
+dotenv.config();
+
 const { autoUpdater } = pkgUpdater;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -246,7 +249,12 @@ app.whenReady().then(() => {
   // --- Google OAuth ---
   ipcMain.handle('google-auth-login', async (event) => {
     return new Promise((resolve, reject) => {
-      const clientId = '717018004786-tjbjr75oponqt12g1haqh5bmvibsce0c.apps.googleusercontent.com';
+      const clientId = process.env.VITE_GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.VITE_GOOGLE_CLIENT_SECRET;
+      
+      if (!clientId || !clientSecret) {
+        return reject(new Error("Missing Google OAuth credentials in .env"));
+      }
       
       // Generate PKCE code verifier and challenge
       const codeVerifier = crypto.randomBytes(32).toString('base64url');
@@ -282,6 +290,7 @@ app.whenReady().then(() => {
                 const tokenBody = new URLSearchParams({
                   code,
                   client_id: clientId,
+                  client_secret: clientSecret,
                   redirect_uri: redirectUri,
                   grant_type: 'authorization_code',
                   code_verifier: codeVerifier
@@ -342,7 +351,7 @@ app.whenReady().then(() => {
       server.listen(0, '127.0.0.1', () => {
         boundPort = server.address().port;
         const redirectUri = `http://127.0.0.1:${boundPort}/callback`;
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=profile%20email&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=profile%20email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.appdata&code_challenge=${codeChallenge}&code_challenge_method=S256`;
         
         console.log('[TARA Auth] Loopback server on port', boundPort);
         console.log('[TARA Auth] Opening browser for auth...');
