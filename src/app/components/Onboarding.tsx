@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { SpinningStar } from "./SpinningStar";
 import { Bot, Check, User, Loader2, Globe, Shield, Cpu, Zap, Heart, Code2, BarChart3, MessageCircle, ChevronDown, AlertCircle, Volume2, Smile } from "lucide-react";
+import { SiriOrb } from "./SiriOrb";
 
 export interface ThemeConfig {
   id: string; name: string; emoji: string;
@@ -462,30 +463,16 @@ export function Onboarding({ onComplete }: Props) {
             width: "min(600px, calc(100vw - 48px))",
             fontFamily: "'Cormorant SC', serif",
           }}>
-            {/* Tara's Core (Optimized Liquid Fluid) */}
+            {/* Tara's Core (Siri-Style WebGL Orb) */}
             <div style={{
-              width: 160, height: 160, marginBottom: 50,
-              background: `linear-gradient(135deg, ${theme.accentColor}, #ec4899, #8b5cf6, #06b6d4, ${theme.accentColor})`,
-              backgroundSize: "300% 300%",
-              animation: `ob-liquid-bg 8s ease infinite, ob-liquid-shape ${waveActive ? "1.2s" : "7s"} ease-in-out infinite alternate`,
-              boxShadow: waveActive ? `0 0 50px 10px ${theme.accentColor}77` : `0 0 20px 3px ${theme.accentColor}22`,
-              filter: waveActive ? "brightness(1.15)" : "brightness(1)",
-              transform: waveActive ? "scale(1.08)" : "scale(1)",
-              transition: "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease, box-shadow 0.2s ease, animation-duration 0.5s",
+              width: 220, height: 220, marginBottom: 30,
               display: "flex", alignItems: "center", justifyContent: "center",
-              willChange: "transform, filter, border-radius, background-position",
+              position: "relative",
+              animation: "ob-fade-up 0.8s ease-out both",
+              filter: waveActive ? "brightness(1.15) contrast(1.1)" : "brightness(1)",
+              transition: "filter 0.3s ease-out",
             }}>
-               {/* Inner audio visualizer inside the liquid */}
-              <div style={{ display: "flex", gap: 4, alignItems: "center", height: 28, mixBlendMode: "overlay" }}>
-                {waveBars.slice(10, 16).map(b => (
-                  <div key={b.id} style={{
-                    width: 4, borderRadius: 2, background: "#fff",
-                    "--h": `${Math.min(b.maxH, 36)}px`,
-                    animation: `${waveActive ? "wave-speak" : "wave-idle"} ${b.dur}s ${b.delay}s ease-in-out infinite`,
-                    willChange: "transform, opacity, height",
-                  } as any} />
-                ))}
-              </div>
+              <SiriOrb isListening={waveActive} baseColor={theme.accentColor} />
             </div>
 
             {/* Typewriter Text beneath */}
